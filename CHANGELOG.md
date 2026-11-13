@@ -8,7 +8,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/).
 - Carte : synchronisation des symboles avant la mise à jour des points pour éviter une couleur manquante après une modification à chaud.
 - Bouton « Réinitialiser les filtres » dans la légende : efface échéance, affectations et recherche sans modifier le scénario ni l'horizon ; aide sur la catégorie cinq à dix ans.
 - Carte et diagramme : suppression de l'atténuation hors programme ; rouge, jaune et vert restent à pleine opacité même lorsque les seuils changent. Seuls les bâtiments au-delà de dix ans sont gris à 30 % d'opacité.
-- Graphique des coûts : rénovation scindée en enveloppe thermique (vert foncé) et équipements techniques (vert clair) ; nouveau graphique « Loyers » (manque à gagner négatif : 1 an de loyers réparti sur 30 ans ; hausse de loyer de confort positive, +10 % — hypothèse non sourcée).
+- Graphique des coûts : rénovation scindée en enveloppe thermique (vert foncé) et équipements techniques (vert clair) ; loyers intégrés au graphique des coûts annuels (manque à gagner sous l'axe : 1 an de loyers réparti sur 30 ans ; hausse de loyer de confort au-dessus, +10 % — hypothèse non sourcée).
 - Photovoltaïque en toiture dans les équipements (2 400 CHF/kWc, 1 050 kWh/kWc, dimensionné sur l'électricité de chauffage) ; non installable sur les bâtiments protégés, avec mention dans la fiche.
 - Mention que les subventions ne sont pas appliquées (feuille de route de la Ville de Genève elle-même).
 - Hypothèses : coût social du carbone (200 CHF/tCO₂e), facteur d'émission de l'électricité (0,024 kgCO₂e/kWh), photovoltaïque et loyers.
