@@ -1,10 +1,10 @@
-// Convertit ville_geneve_core.geojson (SITG + QuantHome) en un JSON compact
-// consommé par l'application : src/buildings.generated.json
-// Usage : npm run data [-- chemin/vers/fichier.geojson]
+// Convertit public/data/ville_geneve_core.geojson (produit par stock.py, SITG + QuantHome) en un JSON
+// compact consommé par l'application : src/buildings.generated.json (non versionné).
+// Usage : npm run data   ou   node scripts/build-buildings.mjs [chemin/vers/fichier.geojson]
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const input = process.argv[2] ?? fileURLToPath(new URL('../ville_geneve_core.geojson', import.meta.url));
+const input = process.argv[2] ?? fileURLToPath(new URL('../public/data/ville_geneve_core.geojson', import.meta.url));
 const output = fileURLToPath(new URL('../src/buildings.generated.json', import.meta.url));
 const geo = JSON.parse(readFileSync(input, 'utf8'));
 
@@ -84,12 +84,8 @@ const buildings = rows.map(({ f, p, district, street, use, heating, year, yearEs
   }
   const constructionYear = year ?? medianYear;
   if (year === null || yearEstimated) imputed.push('year');
-  // Proxy d'état (indice Stratus indisponible) : vieillissement + travaux énergétiques récents.
-  const age = Math.max(0, NOW - constructionYear);
-  let condition = 0.95 - Math.min(0.6, age * 0.0055);
-  const lastWork = p.last_energy_permit ? +p.last_energy_permit.slice(0, 4) : null;
-  if (lastWork && NOW - lastWork <= 15) condition += 0.12;
-  condition = round(Math.min(0.95, Math.max(0.25, condition)), 2);
+  // Indice d'état : calculé dans l'application (model.ts, courbe en S de l'âge effectif).
+  const lastWorkYear = p.last_energy_permit ? +p.last_energy_permit.slice(0, 4) : null;
   return {
     id: String(p.egid),
     name: street || `Bâtiment ${p.egid}`,
@@ -99,8 +95,8 @@ const buildings = rows.map(({ f, p, district, street, use, heating, year, yearEs
     coordinates: centroid(f.geometry.coordinates[0]).map((v) => round(v, 6)),
     area: Math.round(p.sre),
     constructionYear,
-    condition,
-    annualDecay: 0.015,
+    lastWorkYear,
+    height: Number.isFinite(p.height) ? round(p.height, 1) : null,
     idc: Math.round(idc),
     carbonIntensity: round(carbon, 1),
     heating,

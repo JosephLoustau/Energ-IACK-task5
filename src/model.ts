@@ -17,8 +17,16 @@ export interface Building {
   coordinates: [number, number];
   area: number;
   constructionYear: number;
+  /** Indice d'état en BASE_YEAR (0 = ruine, 1 = neuf). */
   condition: number;
+  /** Perte d'état sur l'année suivant BASE_YEAR (pente courante de la courbe). */
   annualDecay: number;
+  /** Âge effectif en BASE_YEAR ; si présent, l'état suit la courbe en S (sinon décroissance linéaire). */
+  effectiveAge?: number;
+  /** Année des derniers travaux énergétiques connus (permis SITG), ou null. */
+  lastWorkYear?: number | null;
+  /** Hauteur du bâtiment (m, SITG), pour la carte 3D. */
+  height?: number | null;
   idc: number;
   carbonIntensity: number;
   heating: Heating;
@@ -124,8 +132,41 @@ export function thresholdsAt(strategy: Strategy, year: number): Thresholds {
   return latest?.thresholds ?? strategy.thresholds;
 }
 
+/**
+ * Modèle d'état (indice Stratus non disponible) : courbe logistique en S de l'âge effectif.
+ * L'état reste élevé les premières décennies, chute autour de `midAge`, puis tend vers `floor`.
+ * Hypothèses de l'équipe, à calibrer.
+ */
+export const DEGRADATION = {
+  midAge: 60,           // ans : âge effectif où l'état est à mi-chemin entre 1 et floor
+  steepness: 0.07,      // 1/an : raideur de la chute
+  floor: 0.1,           // état minimal atteint
+  maxEffectiveAge: 60,  // ans : entretien courant, aucun bâtiment n'est « plus vieux » que cela
+  workRecovery: 15,     // ans d'âge effectif retirés par des travaux énergétiques récents (permis)
+};
+
+export function conditionAtAge(age: number, p = DEGRADATION) {
+  const a = Math.max(0, age);
+  const norm = 1 + Math.exp(-p.steepness * p.midAge); // garantit état = 1 à l'âge 0
+  return p.floor + (1 - p.floor) * norm / (1 + Math.exp(p.steepness * (a - p.midAge)));
+}
+
+export function effectiveAge(constructionYear: number, lastWorkYear: number | null | undefined, p = DEGRADATION) {
+  const age = Math.min(Math.max(0, BASE_YEAR - constructionYear), p.maxEffectiveAge);
+  return lastWorkYear ? Math.max(0, age - p.workRecovery) : age;
+}
+
 export function conditionAt(building: Building, year: number) {
-  return Math.max(0, building.condition - Math.max(0, year - BASE_YEAR) * building.annualDecay);
+  const elapsed = Math.max(0, year - BASE_YEAR);
+  if (building.effectiveAge !== undefined) return conditionAtAge(building.effectiveAge + elapsed);
+  return Math.max(0, building.condition - elapsed * building.annualDecay);
+}
+
+/** Complète un bâtiment avec son état modélisé (âge effectif, état en BASE_YEAR, pente annuelle). */
+export function withConditionModel<T extends Omit<Building, 'condition' | 'annualDecay' | 'effectiveAge'>>(building: T): T & Pick<Building, 'condition' | 'annualDecay' | 'effectiveAge'> {
+  const age = effectiveAge(building.constructionYear, building.lastWorkYear);
+  const condition = conditionAtAge(age);
+  return { ...building, effectiveAge: age, condition, annualDecay: condition - conditionAtAge(age + 1) };
 }
 
 export function triggeredCriteria(building: Building, thresholds: Thresholds, year: number): Criterion[] {

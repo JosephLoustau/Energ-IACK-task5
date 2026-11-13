@@ -1,3 +1,4 @@
+import { withConditionModel } from './model';
 import type { Building, BuildingUse, Heating } from './model';
 import realBuildings from './buildings.generated.json';
 
@@ -56,5 +57,6 @@ export function createDemoBuildings(): Building[] {
 }
 
 /** Parc réel de la Ville de Genève (ville_geneve_core.geojson → npm run data). */
-export const BUILDINGS = realBuildings as unknown as Building[];
+export const BUILDINGS: Building[] = (realBuildings as unknown as Omit<Building, 'condition' | 'annualDecay'>[])
+  .map(withConditionModel);
 export const BUILDING_USES = [...new Set(BUILDINGS.map((b) => b.use))].sort((a, b) => a.localeCompare(b, 'fr'));
