@@ -19,4 +19,5 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/).
 - Remplacement de Leaflet par MapLibre GL.
 
 ### Technique
+- Installation : MapLibre GL ajusté vers `^6.16.0` et verrou de dépendances régénéré, les versions précédemment verrouillées n'étant pas disponibles sur le registre configuré.
 - Fins de ligne : les fichiers du dépôt sont en CRLF ; `core.whitespace=cr-at-eol` configuré localement pour que les CR ne soient pas signalés comme changements.
