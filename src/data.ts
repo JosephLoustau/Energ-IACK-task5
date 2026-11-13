@@ -1,4 +1,5 @@
 import type { Building, BuildingUse, Heating } from './model';
+import realBuildings from './buildings.generated.json';
 
 const districts = [
   { name: 'Servette', coordinates: [46.218, 6.125] },
@@ -54,5 +55,6 @@ export function createDemoBuildings(): Building[] {
   });
 }
 
-export const BUILDINGS = createDemoBuildings();
-export const BUILDING_USES = uses;
+/** Parc réel de la Ville de Genève (ville_geneve_core.geojson → npm run data). */
+export const BUILDINGS = realBuildings as unknown as Building[];
+export const BUILDING_USES = [...new Set(BUILDINGS.map((b) => b.use))].sort((a, b) => a.localeCompare(b, 'fr'));
