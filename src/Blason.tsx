@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 /** Blason stylisé de la Ville de Genève : aigle impérial (demi) et clé d'or sur fond gueules. */
 export default function Blason({ size = 40 }: { size?: number }) {
   return <svg width={size} height={size * 1.2} viewBox="0 0 100 120" role="img" aria-label="Blason de la Ville de Genève">
@@ -23,4 +24,8 @@ export default function Blason({ size = 40 }: { size?: number }) {
     <path d="M4 4 H96 V58 C96 92 72 110 50 117 C28 110 4 92 4 58Z" fill="none" stroke="#111" strokeWidth="4" />
     <line x1="50" y1="4" x2="50" y2="117" stroke="#111" strokeWidth="1.5" />
   </svg>;
+=======
+export default function Blason() {
+  return <img className="city-logo" src="/ville-geneve.svg" width="110" height="65" alt="Ville de Genève — logo officiel" />;
+>>>>>>> origin/3d-view
 }

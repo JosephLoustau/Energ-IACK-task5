@@ -1,6 +1,6 @@
 # Energ-IACK-task5
 
-## ÉnergiACK — Trajectoire Genève
+## StratoRéno — Trajectoire Genève
 
 Application web d'aide à la décision pour prioriser la rénovation et la
 décarbonation d'un parc municipal. Première version fonctionnelle avec
@@ -16,10 +16,10 @@ npm run dev
 ```
 
 Ouvrir l'adresse locale affichée dans le terminal (par défaut
-http://127.0.0.1:5173). Le fond OpenStreetMap et les polices web nécessitent
-Internet. Les marqueurs, les calculs et la liste restent accessibles si le
-fond de carte échoue ; un avertissement est affiché. Les polices disposent
-d'un repli système.
+http://127.0.0.1:5173). Le fond swisstopo nécessite Internet. La liste et
+les calculs restent accessibles si le fond de carte échoue ; un
+avertissement est affiché. Le logo est servi localement et les polices
+utilisent celles du système.
 
 ```powershell
 npm test
@@ -29,9 +29,11 @@ npm run preview
 
 ### Parcours de démonstration
 
-1. Explorer le programme immédiat de la stratégie **Conservatoire**.
-2. Passer à **Accélération carbone** et comparer les KPI.
-3. Ouvrir **À votre mesure**, choisir une base et modifier les curseurs.
+1. Explorer le programme immédiat du scénario **Base légale**.
+2. Passer à **Exemplaire** et comparer les KPI.
+3. Ouvrir **Modulable**, choisir une base et modifier les curseurs.
+   Les repères S1/S2 et leurs valeurs, affichés uniquement dans ce
+   scénario, comparent les deux références sans les modifier.
 4. Ajouter, par exemple, un seuil IDC de 450 en 2030 : **exemple de
    simulation seulement**, pas calendrier légal confirmé.
 5. Comparer les programmes cumulés en 2026, 2031 et 2036, puis cliquer sur
@@ -40,10 +42,47 @@ npm run preview
    gains supposés. Exporter la sélection en CSV.
 
 Les filtres d'usage et de recherche s'appliquent à la carte, à la liste et
-aux KPI. Les bâtiments verts sont en surveillance et ne génèrent pas de
+aux KPI. Les bâtiments gris sont en surveillance et ne génèrent pas de
 travaux simulés. Les paramètres sont conservés pendant la session de page,
 mais réinitialisés au rechargement. Changer la base personnalisée
 réinitialise ses curseurs et son calendrier.
+
+Le bouton « Réinitialiser les filtres » dans la légende efface
+l'échéance isolée, les affectations et la recherche, puis ferme la fiche
+sélectionnée. Le scénario, ses seuils et l'horizon du programme restent
+inchangés. Dans la carte et le diagramme, les points rouges, jaunes et verts restent
+à pleine opacité ; les bâtiments au-delà de dix ans sont
+gris à 30 % d'opacité, indépendamment de l'horizon des KPI et après modification
+des seuils. Cliquer sur « Sous 10 ans » isole les bâtiments dont le premier
+besoin apparaît entre cinq et dix ans.
+
+Le nombre de bâtiments et les m² du périmètre sélectionné accompagnent
+des widgets KPI agrandis. Pour les bâtiments gris, ces valeurs
+représentent le parc sous surveillance, sans rénovation simulée.
+Les échéances utilisent les mêmes familles de couleurs sur la carte,
+le diagramme, la légende et les fiches : **rouge = immédiat, jaune =
+5 ans, vert = 10 ans, gris à 30 % = surveillance au-delà de 10 ans**. Le gris
+signifie qu'aucun besoin n'a été identifié dans les dix ans modélisés,
+sans prédire une date de rénovation ultérieure. Les nuances dans une
+famille indiquent le nombre de critères dépassés. Les formes
+d'affectation et les tailles de référence dans la légende sont bleues.
+
+Chaque scénario possède son propre accent, repris sur les seuils,
+les curseurs et les widgets : **Base légale rouge, Exemplaire
+vert, Modulable bleu**. Les trois seuils sont
+séparés en blocs distincts.
+
+### Identité visuelle
+
+Présentation inspirée de l'identité numérique de Genève : jaune
+`#ffcd00`, gris chaud et noir, en-tête blanc. Le
+[logo officiel](https://www.geneve.ch/themes/custom/vdg_theme/logo.svg)
+est conservé sans modification dans [public/ville-geneve.svg](./public/ville-geneve.svg),
+conformément au principe de non-altération présenté sur la
+[page de mise à disposition](https://www.geneve.ch/autorites-administration/administration-municipale/mise-disposition-logo).
+La typographie système Helvetica/Arial est un remplacement, et non la
+fonte propriétaire de la charte imprimée. Le prototype n'est pas un
+service officiel ni une application homologuée par la Ville.
 
 ### Méthode et limites
 
@@ -64,7 +103,6 @@ Voir le [cahier des charges](./CAHIER-DES-CHARGES.md) et le panneau
 - [Données fictives](./src/data.ts) : génération déterministe.
 - [Tableau de bord](./src/App.tsx) et [carte](./src/BuildingMap.tsx).
 - [Tests métier](./src/model.test.ts).
-- [Rapport HTML](./src/report/) : calculs ([plan.ts](./src/report/plan.ts)), mise en page ([runtime.js](./src/report/runtime.js), [report.css](./src/report/report.css)) et **textes par défaut** ([texts.ts](./src/report/texts.ts)) ; fonctionnement détaillé : [docs/report.html](./docs/report.html).
 - [Transcriptions de cadrage](./transcripts/transcripts.zip).
 
 ### Intégration réelle ultérieure

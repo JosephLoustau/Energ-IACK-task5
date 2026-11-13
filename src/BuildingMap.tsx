@@ -13,6 +13,7 @@ maplibregl.setWorkerUrl(workerUrl);
 
 export const BASEMAP_STYLE = 'https://vectortiles.geo.admin.ch/styles/ch.swisstopo.lightbasemap.vt/style.json';
 
+<<<<<<< HEAD
 // Fond allégé : sans voies ferrées ni tram ; autoroutes et routes principales en blanc comme les autres.
 const RAIL_LAYERS = ['public_transport', 'tunnel_public_transport', 'l1_public_transport', 'l2_public_transport_aerialway', 'road_number'];
 const ROAD_FILL = ['road_fill', 'l1_fill', 'l2_fill'];
@@ -24,12 +25,18 @@ function simplifyBasemap(map: maplibregl.Map) {
   for (const id of ROAD_CASING) if (map.getLayer(id)) map.setPaintProperty(id, 'line-color', 'rgb(90, 90, 90)');
 }
 
+=======
+>>>>>>> origin/3d-view
 const lngs = BUILDINGS.map((b) => b.coordinates[1]);
 const lats = BUILDINGS.map((b) => b.coordinates[0]);
 const BOUNDS: LngLatBoundsLike = [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]];
 const ICON_PX = 44; // pixelRatio 2 → 22 px à l'échelle 1
 const BLOCKS_URL = '/data/ville_geneve_3d.geojson'; // produit par stock.py (npm run data)
+<<<<<<< HEAD
 const BLOCK_LAYERS = ['context-3d', 'city-3d', 'pins', 'selection-disc', 'selection-ring'];
+=======
+const BLOCK_LAYERS = ['context-3d', 'city-3d', 'pins'];
+>>>>>>> origin/3d-view
 // Passage progressif plan → 3D : à Z_FLAT et en dessous, carte à plat ; à Z_FULL, volumes et inclinaison complets.
 const Z_FLAT = 13;
 const Z_FULL = 16;
@@ -54,6 +61,7 @@ const PIN_LEVELS = [{ scale: 0.22, thick: 0.3 }, { scale: 0.5, thick: 0.25 }, { 
 const pinColor = (selected: string | null) =>
   ['case', ['==', ['get', 'id'], selected ?? ''], SELECTED, ['get', 'color']] as never;
 const symbolOpacity = (fade: boolean) => (fade
+<<<<<<< HEAD
   ? ['interpolate', ['linear'], ['zoom'], PIN_IN, ['case', ['==', ['get', 'muted'], 1], 0.3, 1], PIN_IN + 1, 0]
   : ['case', ['==', ['get', 'muted'], 1], 0.3, 1]) as never;
 const fadeOut = (value: number, fade: boolean) =>
@@ -103,6 +111,11 @@ function selectionRing(map: maplibregl.Map, id: string | null) {
     ],
   };
 }
+=======
+  ? ['interpolate', ['linear'], ['zoom'], PIN_IN, ['get', 'opacity'], PIN_IN + 1, 0]
+  : ['get', 'opacity']) as never;
+const haloOpacity = (fade: boolean) => (fade ? ['interpolate', ['linear'], ['zoom'], PIN_IN, 0.55, PIN_IN + 1, 0] : 0.55) as never;
+>>>>>>> origin/3d-view
 
 /** Forme (repère [-1, 1], y vers le bas) → anneau lng/lat de rayon r mètres autour du point. */
 function shapeRing(shape: [number, number][], lng: number, lat: number, r: number) {
@@ -112,7 +125,11 @@ function shapeRing(shape: [number, number][], lng: number, lat: number, r: numbe
   return [[...ring, ring[0]!]];
 }
 
+<<<<<<< HEAD
 function toPins(assessments: Assessment[], mutedIds: Set<string>) {
+=======
+function toPins(assessments: Assessment[]) {
+>>>>>>> origin/3d-view
   const features: GeoJSON.Feature<GeoJSON.Polygon>[] = [];
   for (const item of assessments) {
     const b = item.building;
@@ -120,7 +137,11 @@ function toPins(assessments: Assessment[], mutedIds: Set<string>) {
     const r = 4 + 3 * symbolScale(b.area);          // m, suit la taille du symbole (SRE)
     const shape = shapePolygon(shapeFor(b.use));
     let z = (b.height ?? 6) + PIN_GAP;
+<<<<<<< HEAD
     const color = mutedIds.has(b.id) ? '#d9d9d9' : markerColor(item.cohort, criteriaOf(item));
+=======
+    const color = item.cohort === 'safe' ? '#d9d9d9' : markerColor(item.cohort, criteriaOf(item));
+>>>>>>> origin/3d-view
     const info = `${b.use} · ${COHORTS[item.cohort].short}`;
     for (const { scale, thick } of PIN_LEVELS) {
       features.push({
@@ -155,6 +176,7 @@ function addBlocks(map: maplibregl.Map) {
       'fill-extrusion-opacity': 0.95,
     },
   }, 'selected-halo');
+<<<<<<< HEAD
   map.addSource('selection', { type: 'geojson', data: selectionRing(map, null) });
   for (const part of ['disc', 'ring']) map.addLayer({
     id: `selection-${part}`, type: 'fill-extrusion', source: 'selection', layout: { visibility: 'none' },
@@ -166,6 +188,9 @@ function addBlocks(map: maplibregl.Map) {
     },
   }, 'context-3d');
   map.addSource('pins', { type: 'geojson', data: toPins([], new Set()) });
+=======
+  map.addSource('pins', { type: 'geojson', data: toPins([]) });
+>>>>>>> origin/3d-view
   map.addLayer({
     id: 'pins', type: 'fill-extrusion', source: 'pins', layout: { visibility: 'none' },
     paint: {
@@ -193,7 +218,11 @@ function drawIcon(shape: keyof typeof SHAPES, color: string) {
   return ctx.getImageData(0, 0, ICON_PX, ICON_PX);
 }
 
+<<<<<<< HEAD
 function toCollection(assessments: Assessment[], mutedIds: Set<string>) {
+=======
+function toCollection(assessments: Assessment[]) {
+>>>>>>> origin/3d-view
   return {
     type: 'FeatureCollection' as const,
     features: assessments.map((item) => ({
@@ -206,7 +235,11 @@ function toCollection(assessments: Assessment[], mutedIds: Set<string>) {
         icon: iconKey(item.building.use, markerColor(item.cohort, criteriaOf(item))),
         size: Number(symbolScale(item.building.area).toFixed(2)),
         sre: item.building.area,
+<<<<<<< HEAD
         muted: mutedIds.has(item.building.id) ? 1 : 0,
+=======
+        opacity: COHORTS[item.cohort].opacity,
+>>>>>>> origin/3d-view
       },
     })),
   };
@@ -214,19 +247,31 @@ function toCollection(assessments: Assessment[], mutedIds: Set<string>) {
 
 interface Props {
   assessments: Assessment[];
+<<<<<<< HEAD
   mutedIds: Set<string>;
+=======
+>>>>>>> origin/3d-view
   selected: string | null;
   active: boolean;
   onSelect: (id: string) => void;
 }
 
+<<<<<<< HEAD
 export default function BuildingMap({ assessments, mutedIds, selected, active, onSelect }: Props) {
+=======
+export default function BuildingMap({ assessments, selected, active, onSelect }: Props) {
+>>>>>>> origin/3d-view
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
   const [ready, setReady] = useState(false);
+<<<<<<< HEAD
   const [error, setError] = useState(false);
+=======
+  const [error, setError] = useState(false);
+  const [blocksError, setBlocksError] = useState(false);
+>>>>>>> origin/3d-view
   const [is3d, setIs3d] = useState(true); // 3D automatique selon le zoom ; false = toujours en plan
   const is3dRef = useRef(is3d);
   is3dRef.current = is3d;
@@ -238,6 +283,7 @@ export default function BuildingMap({ assessments, mutedIds, selected, active, o
     });
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
+<<<<<<< HEAD
     map.on('error', () => setError(true));
     const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 14, className: 'building-popup' });
     map.on('load', () => {
@@ -246,6 +292,17 @@ export default function BuildingMap({ assessments, mutedIds, selected, active, o
         map.addImage(`${shape}|${color}`, drawIcon(shape, color), { pixelRatio: 2 });
       }
       map.addSource('buildings', { type: 'geojson', data: toCollection([], new Set()) });
+=======
+    map.on('error', (event) => {
+      const sourceId = (event as { sourceId?: string }).sourceId;
+      console.warn('[carte]', event.error?.message ?? event, sourceId ?? '');
+      // Les volumes 3D (public/data/ville_geneve_3d.geojson) sont indépendants du fond de carte swisstopo.
+      if (sourceId === 'city-blocks') setBlocksError(true); else setError(true);
+    });
+    const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 14, className: 'building-popup' });
+    map.on('load', () => {
+      map.addSource('buildings', { type: 'geojson', data: toCollection([]) });
+>>>>>>> origin/3d-view
       map.addLayer({
         id: 'selected-halo', type: 'circle', source: 'buildings', filter: ['==', ['get', 'id'], ''],
         paint: {
@@ -259,7 +316,11 @@ export default function BuildingMap({ assessments, mutedIds, selected, active, o
           'icon-image': ['get', 'icon'], 'icon-size': ['get', 'size'], 'icon-allow-overlap': true,
           'icon-ignore-placement': true, 'symbol-sort-key': ['-', 0, ['get', 'sre']],
         },
+<<<<<<< HEAD
         paint: { 'icon-opacity': ['case', ['==', ['get', 'muted'], 1], 0.3, 1] },
+=======
+        paint: { 'icon-opacity': ['get', 'opacity'] },
+>>>>>>> origin/3d-view
       });
       addBlocks(map);
       map.on('click', 'city-3d', (event: MapLayerMouseEvent) => {
@@ -293,9 +354,19 @@ export default function BuildingMap({ assessments, mutedIds, selected, active, o
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
+<<<<<<< HEAD
     (map.getSource('buildings') as GeoJSONSource).setData(toCollection(assessments, mutedIds));
     (map.getSource('pins') as GeoJSONSource).setData(toPins(assessments, mutedIds));
   }, [assessments, mutedIds, ready]);
+=======
+    for (const shape of SHAPE_NAMES) for (const color of ICON_COLORS) {
+      const key = `${shape}|${color}`;
+      if (!map.hasImage(key)) map.addImage(key, drawIcon(shape, color), { pixelRatio: 2 });
+    }
+    (map.getSource('buildings') as GeoJSONSource).setData(toCollection(assessments));
+    (map.getSource('pins') as GeoJSONSource).setData(toPins(assessments));
+  }, [assessments, ready]);
+>>>>>>> origin/3d-view
 
   useEffect(() => {
     const map = mapRef.current;
@@ -307,6 +378,7 @@ export default function BuildingMap({ assessments, mutedIds, selected, active, o
     if (building) map.easeTo({ center: [building.coordinates[1], building.coordinates[0]], duration: 500 });
   }, [selected, ready]);
 
+<<<<<<< HEAD
   // Anneau 3D : recalculé quand les volumes sont chargés (l'emprise vient de leurs tuiles).
   useEffect(() => {
     const map = mapRef.current;
@@ -317,6 +389,8 @@ export default function BuildingMap({ assessments, mutedIds, selected, active, o
     return () => { map.off('idle', update); };
   }, [selected, is3d, ready]);
 
+=======
+>>>>>>> origin/3d-view
   useEffect(() => { if (active) mapRef.current?.resize(); }, [active]);
 
   useEffect(() => {
@@ -324,8 +398,12 @@ export default function BuildingMap({ assessments, mutedIds, selected, active, o
     if (!map || !ready) return;
     for (const id of BLOCK_LAYERS) map.setLayoutProperty(id, 'visibility', is3d ? 'visible' : 'none');
     map.setPaintProperty('buildings', 'icon-opacity', symbolOpacity(is3d));
+<<<<<<< HEAD
     map.setPaintProperty('selected-halo', 'circle-opacity', fadeOut(0.55, is3d));
     map.setPaintProperty('selected-halo', 'circle-stroke-opacity', fadeOut(1, is3d));
+=======
+    map.setPaintProperty('selected-halo', 'circle-opacity', haloOpacity(is3d));
+>>>>>>> origin/3d-view
     map.easeTo({ pitch: is3d ? pitchForZoom(map.getZoom()) : 0, duration: 600 });
   }, [is3d, ready]);
 
@@ -354,6 +432,10 @@ export default function BuildingMap({ assessments, mutedIds, selected, active, o
     <div ref={container} className="building-map" aria-label="Carte des bâtiments de la Ville de Genève" />
     <button className="map-recenter" onClick={() => mapRef.current?.fitBounds(BOUNDS, { padding: 50, pitch: 0 })} title="Recentrer sur le parc" aria-label="Recentrer sur le parc"><LocateFixed size={18} /></button>
     <button className="map-recenter map-toggle-3d" onClick={() => setIs3d((v) => !v)} aria-pressed={is3d} title={is3d ? 'Rester en plan' : 'Volumes 3D en zoomant'} aria-label={is3d ? 'Rester en plan' : 'Volumes 3D en zoomant'}>{is3d ? <MapIcon size={18} /> : <Box size={18} />}</button>
+<<<<<<< HEAD
+=======
+    {blocksError && <div className="map-warning blocks" role="status"><AlertTriangle size={15} /> Volumes 3D indisponibles : <code>public/data/ville_geneve_3d.geojson</code> est introuvable (lancer <code>npm run data</code>). La carte 2D reste utilisable.</div>}
+>>>>>>> origin/3d-view
     {error && <div className="map-warning" role="status"><AlertTriangle size={15} /> Fond de carte swisstopo partiellement indisponible. Les points restent utilisables.</div>}
     {assessments.length === 0 && <div className="map-empty">Aucun bâtiment ne correspond aux filtres.</div>}
   </div>;

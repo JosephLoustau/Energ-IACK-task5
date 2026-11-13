@@ -2,11 +2,19 @@ import { useCallback, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import {
   ArrowRight, Building2, CalendarDays, Check, ChevronRight,
+<<<<<<< HEAD
   CircleHelp, FileText, Flame, Leaf, MapPin, Plus, RotateCcw, Search,
   ChartScatter, Map as MapIcon, PlayCircle, ShieldCheck, SlidersHorizontal, Sparkles, Trash2, TrendingUp, Wallet, X,
 } from 'lucide-react';
 import Blason from './Blason';
 import BuildingCharts from './BuildingCharts';
+=======
+  CircleHelp, Download, FileText, Flame, Leaf, MapPin, Plus, RotateCcw, Search,
+  ChartScatter, Map as MapIcon, Wrench, PlayCircle, ShieldCheck, SlidersHorizontal, Sparkles, Trash2, TrendingUp, Wallet, X,
+} from 'lucide-react';
+import Blason from './Blason';
+import RenovationTab from './RenovationTab';
+>>>>>>> origin/3d-view
 import { DISCOUNT_RATE, ELECTRICITY_EMISSION, HEAT_PUMP_COP, PV, REALIZED_SHARE, RENT, SOCIAL_CARBON_COST } from './renovation';
 import BuildingMap from './BuildingMap';
 import ScatterPlot from './ScatterPlot';
@@ -29,7 +37,11 @@ const money = (value: number) => value >= 1_000_000
   : number(value);
 const cohortOrder: Cohort[] = ['now', 'five', 'ten', 'safe'];
 
+<<<<<<< HEAD
 function ThresholdControls({ value, editable, onChange }: {
+=======
+export function ThresholdControls({ value, editable, onChange }: {
+>>>>>>> origin/3d-view
   value: Thresholds; editable: boolean; onChange: (value: Thresholds) => void;
 }) {
   const fields = [
@@ -41,8 +53,30 @@ function ThresholdControls({ value, editable, onChange }: {
     {fields.map(({ key, title, unit, min, max, step, sign, description, icon: Icon }) => <div className="threshold" key={key}>
       <div className="threshold-title"><Icon size={17} /><label htmlFor={`threshold-${key}`}>{title}</label></div>
       <div className="threshold-value"><strong>{sign} {number(value[key], key === 'condition' ? 2 : 0)}</strong><span>{unit}</span></div>
+<<<<<<< HEAD
       <input id={`threshold-${key}`} type="range" min={min} max={max} step={step} disabled={!editable}
         value={value[key]} onChange={(event) => onChange({ ...value, [key]: Number(event.target.value) })} />
+=======
+      <div className={`range-control ${editable ? 'with-references' : ''}`}>
+        <input id={`threshold-${key}`} type="range" min={min} max={max} step={step} disabled={!editable}
+          aria-valuetext={`${number(value[key], key === 'condition' ? 2 : 0)} ${unit}`}
+          value={value[key]} onChange={(event) => onChange({ ...value, [key]: Number(event.target.value) })} />
+        {editable && <div className="range-references">
+          {(['conservative', 'ambitious'] as const).map((id, index) => <span key={id}
+            className={`range-reference ${id}`} role="img"
+            aria-label={`Scénario ${index + 1}, ${PRESETS[id].name} : ${number(PRESETS[id].thresholds[key], key === 'condition' ? 2 : 0)} ${unit}`}
+            data-testid={`reference-${key}-${id}`}
+            style={{ left: `${(PRESETS[id].thresholds[key] - min) / (max - min) * 100}%` }}
+          ><span>{index + 1}</span></span>)}
+        </div>}
+      </div>
+      {editable && <div className="reference-values">
+        {(['conservative', 'ambitious'] as const).map((id, index) => <span key={id} title={PRESETS[id].name}>
+          <b className={`reference-key ${id}`}>S{index + 1}</b>
+          <span>{number(PRESETS[id].thresholds[key], key === 'condition' ? 2 : 0)} <small>{unit}</small></span>
+        </span>)}
+      </div>}
+>>>>>>> origin/3d-view
       <small>{description}</small>
     </div>)}
   </div>;
@@ -94,6 +128,26 @@ function FutureThresholds({ strategy, onChange }: { strategy: Strategy; onChange
   </div>;
 }
 
+<<<<<<< HEAD
+=======
+/** Barre horizontale actuel / rénové avec repère du seuil ; les valeurs sont dans l'infobulle et le texte alternatif. */
+function HorizontalBar({ label, unit, before, after, limit, color }: {
+  label: string; unit: string; before: number; after: number | undefined; limit: number; color: string;
+}) {
+  const max = Math.max(before, after ?? 0, limit) * 1.1 || 1;
+  const pct = (value: number) => `${Math.min(100, value / max * 100)}%`;
+  const text = `${label} : ${number(before, before < 10 ? 1 : 0)} ${unit}${after !== undefined ? `, après rénovation ${number(after, after < 10 ? 1 : 0)}` : ''} ; seuil ${number(limit, limit < 10 ? 1 : 0)}`;
+  return <div className="hbar" role="img" aria-label={text} title={text}>
+    <span className="hbar-label">{label} <small>{unit}</small></span>
+    <div className="hbar-track">
+      <div className="hbar-fill" style={{ width: pct(before), background: color }} />
+      {after !== undefined && <div className="hbar-fill after" style={{ width: pct(after) }} />}
+      <div className="hbar-limit" style={{ left: pct(limit) }} />
+    </div>
+  </div>;
+}
+
+>>>>>>> origin/3d-view
 function BuildingDetail({ assessment, onClose }: { assessment: Assessment; onClose: () => void }) {
   const { building, dueYear, dueThresholds, dueCondition } = assessment;
   const renovation = dueYear === null ? null : renovationFor(building, dueYear);
@@ -110,12 +164,21 @@ function BuildingDetail({ assessment, onClose }: { assessment: Assessment; onClo
     </ul> : <p className="muted-text">Aucun seuil franchi jusqu’en {BASE_YEAR + 10}. Surveillance recommandée, sans travaux simulés.</p>}
     <h4>{renovation ? 'Rénovation simulée à l’échéance' : 'État actuel'}</h4>
     <div className="before-after">
+<<<<<<< HEAD
       <div><span>IDC <small>MJ/m²/an</small></span><strong>{building.idc}{renovation && <><ArrowRight size={13} />{number(renovation.idcAfter)}</>}</strong></div>
       <div><span>CO₂ <small>kg/m²/an</small></span><strong>{number(building.carbonIntensity, 1)}{renovation && <><ArrowRight size={13} />{number(renovation.carbonAfter, 1)}</>}</strong></div>
       <div><span>Indice d’état</span><strong>{number(renovation?.conditionBefore ?? building.condition, 2)}{renovation && <><ArrowRight size={13} />{number(renovation.conditionAfter, 2)}</>}</strong></div>
     </div>
     {renovation && <><div className="detail-investment"><span>Investissement estimé<strong>{money(renovation.cost)} CHF</strong></span><span>CO₂ évitable chaque année<strong>{number(renovation.carbonSaved, 1)} tCO₂e</strong></span></div>
       <p className="detail-note">Paquet de mesures : isolation (façade, toit, cave), fenêtres et PAC air/eau si chauffage fossile — détail des coûts sous le graphique. Faisabilité non étudiée ; hors subventions.</p>
+=======
+      <HorizontalBar label="IDC" unit="MJ/m²/an" before={building.idc} after={renovation?.idcAfter} limit={dueThresholds.idc} color={state.color} />
+      <HorizontalBar label="CO₂" unit="kg/m²/an" before={building.carbonIntensity} after={renovation?.carbonAfter} limit={dueThresholds.carbon} color={state.color} />
+      <div><span>Indice d’état</span><strong>{number(renovation?.conditionBefore ?? building.condition, 2)}{renovation && <><ArrowRight size={13} />{number(renovation.conditionAfter, 2)}</>}</strong></div>
+    </div>
+    {renovation && <><div className="detail-investment"><span>Investissement estimé<strong>{money(renovation.cost)} CHF</strong></span><span>CO₂ évité chaque année<strong>{number(renovation.carbonSaved, 1)} tCO₂e</strong></span></div>
+      <p className="detail-note">Paquet de mesures : isolation (façade, toit, cave), fenêtres et PAC air/eau si chauffage fossile — détail dans l’onglet « Mesures de rénovation ». Faisabilité non étudiée ; hors subventions.</p>
+>>>>>>> origin/3d-view
       {(renovation.idcAfter > dueThresholds.idc || renovation.carbonAfter > dueThresholds.carbon || renovation.conditionAfter < dueThresholds.condition)
         && <p className="residual-warning">L’intervention générique ne satisfait pas tous les seuils de cette stratégie. Une étude complémentaire est nécessaire.</p>}
     </>}
@@ -123,26 +186,69 @@ function BuildingDetail({ assessment, onClose }: { assessment: Assessment; onClo
   </section>;
 }
 
+<<<<<<< HEAD
+=======
+function exportProgram(program: Assessment[], strategy: Strategy) {
+  const rows = [
+    ['Données SITG / QuantHome (indice d’état = proxy)', `Stratégie : ${strategy.name}`, `Année de référence : ${BASE_YEAR}`],
+    ['ID', 'Adresse', 'Quartier', 'Usage', 'Échéance', 'Motifs', 'Surface m²', 'IDC MJ/m²/an', 'CO2 kg/m²/an', 'État actuel', 'État à échéance', 'Enveloppe CHF', 'Gain tCO2e/an'],
+    ...program.map((item) => {
+      const renovation = item.dueYear === null ? null : renovationFor(item.building, item.dueYear);
+      return [
+        item.building.id, item.building.name, item.building.district, item.building.use,
+        item.dueYear ?? 'Surveillance', item.triggers.map((criterion) => CRITERIA[criterion]).join(', '),
+        item.building.area, item.building.idc, item.building.carbonIntensity, item.building.condition,
+        item.dueCondition.toFixed(3), renovation?.cost.toFixed(0) ?? '', renovation?.carbonSaved.toFixed(1) ?? '',
+      ];
+    }),
+  ];
+  const content = '\uFEFF' + rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(';')).join('\r\n');
+  const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8' }));
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `stratoreno-${strategy.id}-donnees-fictives.csv`;
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+>>>>>>> origin/3d-view
 function ShapeIcon({ use, color = '#fff', size = 16 }: { use: string; color?: string; size?: number }) {
   return <svg width={size} height={size} viewBox="-1.3 -1.3 2.6 2.6" aria-hidden="true"><path d={SHAPES[shapeFor(use)]} fill={color} stroke="#111" strokeWidth="0.16" strokeLinejoin="round" /></svg>;
 }
 
+<<<<<<< HEAD
 function Legend({ counts, cohort, onCohort, useCounts, uses, onToggleUse, onClearUses }: {
   counts: Record<string, number>; cohort: Cohort | null; onCohort: (value: Cohort | null) => void;
   useCounts: Record<string, number>; uses: Set<string>; onToggleUse: (use: string) => void; onClearUses: () => void;
+=======
+function Legend({ counts, cohort, onCohort, useCounts, uses, onToggleUse, onClearUses, onResetFilters }: {
+  counts: Record<string, number>; cohort: Cohort | null; onCohort: (value: Cohort | null) => void;
+  useCounts: Record<string, number>; uses: Set<string>; onToggleUse: (use: string) => void; onClearUses: () => void;
+  onResetFilters: () => void;
+>>>>>>> origin/3d-view
 }) {
   const [open, setOpen] = useState(true);
   return <aside className={`legend-panel ${open ? '' : 'collapsed'}`} data-tour="legend" aria-label="Légende et filtres">
     <button className="legend-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>Légende & filtres <ChevronRight size={14} /></button>
+<<<<<<< HEAD
     {open && <>
       <h4>Échéance <small>cliquer pour isoler</small></h4>
       <div className="legend-list">
         {cohortOrder.map((key) => <button key={key} aria-pressed={cohort === key} className={cohort === key ? 'active' : ''} onClick={() => onCohort(cohort === key ? null : key)}>
           <span className="swatches">{key === 'safe' ? <i style={{ background: '#fff' }} /> : SHADES[key].map((color) => <i key={color} style={{ background: color }} />)}</span>
+=======
+    <button className="legend-reset" onClick={onResetFilters} title="Effacer l’échéance, les affectations et la recherche"><RotateCcw size={13} /> Réinitialiser les filtres</button>
+    {open && <>
+      <h4>Échéance <small>cliquer pour isoler</small></h4>
+      <div className="legend-list">
+        {cohortOrder.map((key) => <button key={key} data-cohort={key} aria-pressed={cohort === key} className={cohort === key ? 'active' : ''} onClick={() => onCohort(cohort === key ? null : key)}>
+          <span className="swatches">{[...new Set(SHADES[key])].map((color) => <i key={color} style={{ background: color, opacity: COHORTS[key].opacity }} />)}</span>
+>>>>>>> origin/3d-view
           <span>{COHORTS[key].short}</span><strong>{counts[key]}</strong>
         </button>)}
       </div>
       <p className="legend-hint">Les trois teintes = 1, 2 ou 3 critères dépassés (IDC, CO₂, vétusté).</p>
+<<<<<<< HEAD
       <h4>Affectation <small>{uses.size ? `${uses.size} sélectionnée(s)` : 'toutes'}</small>{uses.size > 0 && <button className="text-button" onClick={onClearUses}>Tout afficher</button>}</h4>
       <div className="legend-list">
         {BUILDING_USES.map((use) => <button key={use} aria-pressed={uses.has(use)} className={uses.has(use) ? 'active' : ''} onClick={() => onToggleUse(use)}>
@@ -151,6 +257,17 @@ function Legend({ counts, cohort, onCohort, useCounts, uses, onToggleUse, onClea
       </div>
       <h4>Taille <small>surface de référence énergétique</small></h4>
       <div className="size-legend">{[200, 2000, 10000, 25000].map((sre) => <span key={sre}><svg width="40" height="40" viewBox="-20 -20 40 40" aria-hidden="true"><circle r={11 * symbolScale(sre)} fill="#f6c51c" stroke="#111" strokeWidth="1.3" /></svg>{number(sre)} m²</span>)}</div>
+=======
+      <p className="legend-hint">Rouge, jaune et vert : pleine opacité. Au-delà de 10 ans : gris à 30 %. L’horizon des KPI ne masque aucun point. « Sous 10 ans » couvre les besoins entre 5 et 10 ans.</p>
+      <h4>Affectation <small>{uses.size ? `${uses.size} sélectionnée(s)` : 'toutes'}</small>{uses.size > 0 && <button className="text-button" onClick={onClearUses}>Tout afficher</button>}</h4>
+      <div className="legend-list">
+        {BUILDING_USES.map((use) => <button key={use} aria-pressed={uses.has(use)} className={`use-filter ${uses.has(use) ? 'active' : ''}`} onClick={() => onToggleUse(use)}>
+          <ShapeIcon use={use} color="#347bc1" /><span>{use}</span><strong>{useCounts[use] ?? 0}</strong>
+        </button>)}
+      </div>
+      <h4>Taille <small>surface de référence énergétique</small></h4>
+      <div className="size-legend">{[200, 2000, 10000, 25000].map((sre) => <span key={sre}><svg width="40" height="40" viewBox="-20 -20 40 40" aria-hidden="true"><circle r={11 * symbolScale(sre)} fill="#347bc1" stroke="#111" strokeWidth="1.3" /></svg>{number(sre)} m²</span>)}</div>
+>>>>>>> origin/3d-view
     </>}
   </aside>;
 }
@@ -158,13 +275,21 @@ function Legend({ counts, cohort, onCohort, useCounts, uses, onToggleUse, onClea
 export default function App() {
   const [strategyId, setStrategyId] = useState<StrategyId>('conservative');
   const [customBase, setCustomBase] = useState<'conservative' | 'ambitious'>('conservative');
+<<<<<<< HEAD
   const [custom, setCustom] = useState<Strategy>({ ...PRESETS.conservative, id: 'custom', name: 'Personnalisée', thresholds: { ...PRESETS.conservative.thresholds }, changes: [] });
+=======
+  const [custom, setCustom] = useState<Strategy>({ ...PRESETS.conservative, id: 'custom', name: 'Modulable', thresholds: { ...PRESETS.conservative.thresholds }, changes: [] });
+>>>>>>> origin/3d-view
   const [horizon, setHorizon] = useState(0);
   const [cohort, setCohort] = useState<Cohort | null>(null);
   const [uses, setUses] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
+<<<<<<< HEAD
   const [tab, setTab] = useState<'map' | 'chart'>('map');
+=======
+  const [tab, setTab] = useState<'map' | 'chart' | 'measures'>('map');
+>>>>>>> origin/3d-view
   const [showAssumptions, setShowAssumptions] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
   const strategy = strategyId === 'custom' ? custom : PRESETS[strategyId];
@@ -175,10 +300,15 @@ export default function App() {
   ), [portfolio, uses, query]);
   const program = selectProgram(filtered, horizon, cohort);
   const metrics = programMetrics(program);
+<<<<<<< HEAD
   const programIds = useMemo(() => new Set(program.map((item) => item.building.id)), [program]);
   // Une catégorie choisie n'affiche que ses points ; sinon les points hors horizon sont atténués.
   const visible = useMemo(() => cohort ? filtered.filter((item) => item.cohort === cohort) : filtered, [filtered, cohort]);
   const mutedIds = useMemo(() => cohort ? new Set<string>() : new Set(filtered.filter((item) => !programIds.has(item.building.id)).map((item) => item.building.id)), [filtered, cohort, programIds]);
+=======
+  const programArea = program.reduce((sum, item) => sum + item.building.area, 0);
+  const visible = useMemo(() => cohort ? filtered.filter((item) => item.cohort === cohort) : filtered, [filtered, cohort]);
+>>>>>>> origin/3d-view
   const selectedAssessment = visible.find((item) => item.building.id === selected);
   const selectionLabel = cohort ? COHORTS[cohort].label
     : horizon === 0 ? 'Programme immédiat' : `Programme cumulé d’ici ${BASE_YEAR + horizon}`;
@@ -191,12 +321,17 @@ export default function App() {
 
   function resetCustom(base = customBase) {
     setCustomBase(base);
+<<<<<<< HEAD
     setCustom({ ...PRESETS[base], id: 'custom', name: 'Personnalisée', thresholds: { ...PRESETS[base].thresholds }, changes: [] });
+=======
+    setCustom({ ...PRESETS[base], id: 'custom', name: 'Modulable', thresholds: { ...PRESETS[base].thresholds }, changes: [] });
+>>>>>>> origin/3d-view
   }
   function toggleUse(use: string) {
     setUses((current) => { const next = new Set(current); if (!next.delete(use)) next.add(use); return next; });
     setSelected(null);
   }
+<<<<<<< HEAD
   function exportReport() {
     const strategies = strategyId === 'custom' ? [PRESETS.conservative, PRESETS.ambitious, custom] : [PRESETS.conservative, PRESETS.ambitious];
     const scope = [uses.size ? [...uses].join(', ') : 'tout le parc', query.trim() && `recherche « ${query.trim()} »`].filter(Boolean).join(' · ');
@@ -211,6 +346,27 @@ export default function App() {
         <span className="topbar-count"><strong>{BUILDINGS.length}</strong> bâtiments de la Ville</span>
         <button className="help-button" onClick={() => setTourOpen(true)}><PlayCircle size={16} /> Visite guidée</button>
         <button className="help-button" disabled={filtered.length === 0} onClick={exportReport}><FileText size={16} /> Rapport HTML</button>
+=======
+  function resetFilters() {
+    setCohort(null);
+    setUses(new Set());
+    setQuery('');
+    setSelected(null);
+  }
+  function exportReport() {
+    const strategies = strategyId === 'custom' ? [PRESETS.conservative, PRESETS.ambitious, custom] : [PRESETS.conservative, PRESETS.ambitious];
+    const scope = [uses.size ? [...uses].join(', ') : 'tout le parc', query.trim() && `recherche « ${query.trim()} »`].filter(Boolean).join(' · ');
+    new HtmlReport({ buildings: filtered.map((item) => item.building), strategies, selectedStrategy: strategy.id, scopeLabel: scope }).download();
+  }
+  const onTourEnter = useCallback((action: 'tab-map' | 'tab-chart') => setTab(action === 'tab-map' ? 'map' : 'chart'), []);
+
+  return <div className="app-shell" data-strategy={strategyId}>
+    <header className="topbar">
+      <a className="brand" href="#main" aria-label="StratoRéno — tableau de bord"><Blason /><span>Strato<span className="brand-emphasis">Réno</span><small>STRATÉGIE DE RÉNOVATION</small></span></a>
+      <div className="topbar-right">
+        <span className="topbar-count"><strong>{BUILDINGS.length}</strong> bâtiments de la Ville</span>
+        <button className="help-button" onClick={() => setTourOpen(true)}><PlayCircle size={16} /> Visite guidée</button>
+>>>>>>> origin/3d-view
         <button className="help-button" onClick={() => setShowAssumptions(true)} aria-expanded={showAssumptions}><CircleHelp size={16} /> Méthode & hypothèses</button>
       </div>
     </header>
@@ -227,7 +383,11 @@ export default function App() {
           <div><h3>Carbone et électricité</h3><p>Coût social du carbone : <strong>{SOCIAL_CARBON_COST} CHF/tCO₂e</strong>, appliqué aux émissions annuelles. Facteur d’émission de l’électricité du réseau : <strong>{number(ELECTRICITY_EMISSION, 3)} kgCO₂e/kWh</strong> (convention directe, HFM2015 Tab. 6) ; les émissions du gaz et du mazout viennent des données SITG/QuantHome (scope 1).</p></div>
           <div><h3>Photovoltaïque</h3><p>{number(PV.costPerKwc)} CHF/kWc, productible {number(PV.yield)} kWh/kWc·an, {PV.lifetime} ans, entretien {number(PV.maintenance * 100)} ct/kWh (SWISSOLAR2024). Puissance limitée par la toiture ({number(PV.kwcPerM2, 1)} kWc/m² × part de toiture ensoleillée OCEN) et par la consommation électrique de chauffage. Non installable sur les bâtiments protégés (classés ou à l’inventaire).</p></div>
           <div><h3>Loyers</h3><p>Manque à gagner : {RENT.lossYears} an de loyers résidentiels non perçus pendant les travaux, réparti sur {RENT.spreadYears} ans. Hausse de loyer liée au confort : +{percent(RENT.comfortUplift)} des loyers (hypothèse modèle, non sourcée). Composantes du graphique des coûts annuels : le manque à gagner est tracé sous l’axe, la hausse de loyer au-dessus.</p></div>
+<<<<<<< HEAD
           <div><h3>Lecture de la carte</h3><p>Taille du symbole ∝ √SRE, forme = affectation, couleur = échéance (rouge : immédiat, jaune : sous 5 ans, gris : sous 10 ans, blanc : surveillance), teinte plus foncée = plus de critères dépassés.</p></div>
+=======
+          <div><h3>Lecture de la carte</h3><p>Taille du symbole ∝ √SRE, forme = affectation, couleur = échéance (rouge : immédiat, jaune : sous 5 ans, vert : sous 10 ans, gris à 30 % : surveillance au-delà de 10 ans), teinte plus foncée = plus de critères dépassés. Le gris ne prédit pas une date de rénovation après 2036.</p></div>
+>>>>>>> origin/3d-view
         </div>
         <p className="assumption-footer">Les KPI sont le potentiel annuel des travaux achevés, pas un cumul des émissions évitées. La faisabilité technique, le patrimoine protégé et les contraintes de réseau ne sont pas modélisés. La maquette ne démontre pas la sortie complète des fossiles.</p>
       </section>
@@ -240,32 +400,64 @@ export default function App() {
             <div className="section-label"><SlidersHorizontal size={16} /> SCÉNARIO</div>
             <div className="strategy-options">
               {([
+<<<<<<< HEAD
                 { id: 'conservative', title: 'Conservatoire', subtitle: 'Cadre législatif à valider', icon: ShieldCheck, index: '01' },
                 { id: 'ambitious', title: 'Accélération carbone', subtitle: 'Une ambition visionnaire', icon: Sparkles, index: '02' },
                 { id: 'custom', title: 'À votre mesure', subtitle: 'Seuils et trajectoire libres', icon: SlidersHorizontal, index: '03' },
               ] as const).map(({ id, title, subtitle, icon: Icon, index }) => <button key={id} className={`strategy-option ${strategyId === id ? 'active' : ''}`} aria-pressed={strategyId === id} onClick={() => setStrategyId(id)}>
+=======
+                { id: 'conservative', title: PRESETS.conservative.name, subtitle: 'Cadre législatif à valider', icon: ShieldCheck, index: '01' },
+                { id: 'ambitious', title: PRESETS.ambitious.name, subtitle: 'Une ambition visionnaire', icon: Sparkles, index: '02' },
+                { id: 'custom', title: 'Modulable', subtitle: 'Seuils et trajectoire libres', icon: SlidersHorizontal, index: '03' },
+              ] as const).map(({ id, title, subtitle, icon: Icon, index }) => <button key={id} data-strategy={id} className={`strategy-option ${strategyId === id ? 'active' : ''}`} aria-pressed={strategyId === id} onClick={() => setStrategyId(id)}>
+>>>>>>> origin/3d-view
                 <span className="strategy-option-icon"><Icon size={18} /></span><span><strong>{title}</strong><small>{subtitle}</small></span><span className="strategy-option-number">{strategyId === id ? <Check size={17} /> : index}</span>
               </button>)}
             </div>
           </div>
+<<<<<<< HEAD
           {strategyId === 'custom' && <div className="custom-base"><label htmlFor="custom-base">Partir de la stratégie</label><select id="custom-base" value={customBase} onChange={(event) => resetCustom(event.target.value === 'ambitious' ? 'ambitious' : 'conservative')}><option value="conservative">Conservatoire</option><option value="ambitious">Accélération carbone</option></select><small>Changer la base réinitialise les curseurs et les seuils futurs.</small></div>}
+=======
+          {strategyId === 'custom' && <div className="custom-base"><label htmlFor="custom-base">Partir du scénario</label><select id="custom-base" value={customBase} onChange={(event) => resetCustom(event.target.value === 'ambitious' ? 'ambitious' : 'conservative')}><option value="conservative">{PRESETS.conservative.name}</option><option value="ambitious">{PRESETS.ambitious.name}</option></select><small>Changer la base réinitialise les curseurs et les seuils futurs.</small></div>}
+>>>>>>> origin/3d-view
           <div data-tour="thresholds">
             <div className="threshold-heading"><h3>Seuils en {BASE_YEAR}</h3>{strategyId === 'custom' ? <button className="icon-button" aria-label="Réinitialiser la stratégie personnalisée" onClick={() => resetCustom()}><RotateCcw size={14} /></button> : <span className="fixed-tag">PRÉDÉFINIS</span>}</div>
             <ThresholdControls value={strategy.thresholds} editable={strategyId === 'custom'} onChange={(thresholds) => setCustom({ ...custom, thresholds })} />
             {strategyId !== 'custom' && <button className="text-button customize-link" onClick={() => { resetCustom(strategyId); setStrategyId('custom'); }}>Personnaliser cette stratégie <ArrowRight size={14} /></button>}
           </div>
+<<<<<<< HEAD
           {strategyId === 'custom' ? <FutureThresholds key={customBase} strategy={custom} onChange={setCustom} /> : <div className="calendar-note"><CalendarDays size={17} /><p><strong>Seuils constants par défaut</strong>Aucun calendrier réglementaire chargé. Simulez une évolution dans « À votre mesure ».</p></div>}
+=======
+          {strategyId === 'custom' ? <FutureThresholds key={customBase} strategy={custom} onChange={setCustom} /> : <div className="calendar-note"><CalendarDays size={17} /><p><strong>Seuils constants par défaut</strong>Aucun calendrier réglementaire chargé. Simulez une évolution dans « Modulable ».</p></div>}
+>>>>>>> origin/3d-view
           <div className="priority-note"><span className="live-dot" /><p>Un critère suffit à déclencher. <strong>Priorité IDC → état → CO₂</strong></p></div>
         </aside>
 
         <div className="stage">
           <section className="kpi-strip" data-tour="kpis" aria-live="polite" aria-atomic="true" data-testid="kpis">
+<<<<<<< HEAD
             <div className="kpi-title"><div className="section-label">{selectionLabel.toUpperCase()}</div><p>{metrics.count} bât. à rénover · {number(metrics.area)} m²{cohort === 'safe' && ` · ${program.length} en surveillance`}</p></div>
+=======
+            <div className="program-summary">
+              <div className="kpi-title">
+                <div className="section-label">IMPACT DU PROGRAMME DE RÉNOVATION</div>
+                <h2>{selectionLabel}</h2>
+                <div className="program-totals">
+                  <div className="program-total"><Building2 size={21} /><strong data-testid="program-count">{number(program.length)}</strong><span>{cohort === 'safe' ? 'bâtiments à surveiller' : 'bâtiments à rénover'}</span></div>
+                  <div className="program-total"><strong data-testid="program-area">{number(programArea)}</strong><span><b>m²</b> {cohort === 'safe' ? 'sous surveillance' : 'concernés'}</span></div>
+                </div>
+              </div>
+              <div className="horizon-control" aria-label="Horizon du programme cumulé">{[0, 5, 10].map((value) => <button key={value} className={cohort === null && horizon === value ? 'active' : ''} aria-pressed={cohort === null && horizon === value} onClick={() => { setHorizon(value); setCohort(null); }}>{value === 0 ? 'Aujourd’hui' : `D’ici ${BASE_YEAR + value}`}</button>)}</div>
+            </div>
+>>>>>>> origin/3d-view
             <article className="kpi-card"><div className="kpi-label"><span>Enveloppe</span><Wallet size={14} /></div><div className="kpi-value">{money(metrics.cost)}<small>CHF</small></div></article>
             <article className="kpi-card"><div className="kpi-label"><span>CO₂ évitable / an</span><Leaf size={14} /></div><div className="kpi-value">{number(metrics.carbonSaved)}<small>tCO₂e · {percent(metrics.carbonReduction)}</small></div></article>
             <article className="kpi-card"><div className="kpi-label"><span>IDC moyen</span><Flame size={14} /></div><div className="kpi-value transition-value">{metrics.count ? number(metrics.idcBefore) : '—'}<ArrowRight size={15} /><span>{metrics.count ? number(metrics.idcAfter) : '—'}</span></div></article>
             <article className="kpi-card"><div className="kpi-label"><span>État moyen</span><TrendingUp size={14} /></div><div className="kpi-value transition-value">{metrics.count ? number(metrics.conditionBefore, 2) : '—'}<ArrowRight size={15} /><span>{metrics.count ? number(metrics.conditionAfter, 2) : '—'}</span></div></article>
+<<<<<<< HEAD
             <div className="horizon-control" aria-label="Horizon du programme cumulé">{[0, 5, 10].map((value) => <button key={value} className={cohort === null && horizon === value ? 'active' : ''} aria-pressed={cohort === null && horizon === value} onClick={() => { setHorizon(value); setCohort(null); }}>{value === 0 ? 'Aujourd’hui' : `D’ici ${BASE_YEAR + value}`}</button>)}</div>
+=======
+>>>>>>> origin/3d-view
           </section>
 
           <section className="view-panel" data-tour="map">
@@ -273,11 +465,16 @@ export default function App() {
               <div className="tabs" role="tablist">
                 <button role="tab" aria-selected={tab === 'map'} className={tab === 'map' ? 'active' : ''} onClick={() => setTab('map')}><MapIcon size={15} /> Carte</button>
                 <button role="tab" aria-selected={tab === 'chart'} className={tab === 'chart' ? 'active' : ''} data-tour="chart-tab" onClick={() => setTab('chart')}><ChartScatter size={15} /> Diagramme IDC × CO₂</button>
+<<<<<<< HEAD
+=======
+                <button role="tab" aria-selected={tab === 'measures'} className={tab === 'measures' ? 'active' : ''} data-tour="measures-tab" onClick={() => setTab('measures')}><Wrench size={15} /> Mesures de rénovation</button>
+>>>>>>> origin/3d-view
               </div>
               <label className="search-box"><Search size={15} /><input type="search" aria-label="Rechercher un bâtiment ou quartier" placeholder="Adresse, quartier, EGID…" value={query} onChange={(event) => { setQuery(event.target.value); setSelected(null); }} /></label>
               <span className="map-count"><MapPin size={13} /> {visible.length} / {BUILDINGS.length}</span>
             </div>
             <div className="view-body">
+<<<<<<< HEAD
               <div className={`view-pane ${tab === 'map' ? '' : 'hidden'}`}><BuildingMap assessments={visible} mutedIds={mutedIds} selected={selectedAssessment?.building.id ?? null} active={tab === 'map'} onSelect={setSelected} /></div>
               {tab === 'chart' && <div className="view-pane"><ScatterPlot assessments={visible} mutedIds={mutedIds} selected={selectedAssessment?.building.id ?? null} strategy={strategy} year={BASE_YEAR + horizon} onSelect={setSelected} /></div>}
               <Legend counts={counts} cohort={cohort} onCohort={(value) => { setCohort(value); setSelected(null); }} useCounts={useCounts} uses={uses} onToggleUse={toggleUse} onClearUses={() => setUses(new Set())} />
@@ -290,12 +487,34 @@ export default function App() {
           <section className="building-list" data-tour="roadmap">
             <div className="list-heading"><div><h2>{cohort === 'safe' ? 'Bâtiments à surveiller' : 'Votre feuille de route'}</h2><p>{program.length} bâtiments · {cohort === 'safe' ? 'pas de rénovation simulée' : 'échéance, critères puis impact carbone'}</p></div></div>
             <div className="table-scroll"><table><thead><tr><th>Bâtiment / quartier</th><th>Échéance</th><th>IDC<small>MJ/m²/an</small></th><th>État</th><th>CO₂<small>kg/m²/an</small></th><th>Motif principal</th><th aria-label="Ouvrir la fiche" /></tr></thead><tbody>
+=======
+              <div className={`view-pane ${tab === 'map' ? '' : 'hidden'}`}><BuildingMap assessments={visible} selected={selectedAssessment?.building.id ?? null} active={tab === 'map'} onSelect={setSelected} /></div>
+              {tab === 'chart' && <div className="view-pane"><ScatterPlot assessments={visible} selected={selectedAssessment?.building.id ?? null} strategy={strategy} year={BASE_YEAR + horizon} onSelect={setSelected} /></div>}
+              {tab === 'measures' && <div className="view-pane measures-pane">{selectedAssessment
+                ? <RenovationTab key={selectedAssessment.building.id} building={selectedAssessment.building} onShowOnMap={() => setTab('map')} />
+                : <div className="empty-state"><Wrench size={27} /><h3>Aucun bâtiment sélectionné</h3><p>Choisissez un bâtiment sur la carte, dans le diagramme ou dans la feuille de route (pictogramme <Wrench size={12} />) pour étudier ses mesures de rénovation.</p></div>}</div>}
+              {tab !== 'measures' && <Legend counts={counts} cohort={cohort} onCohort={(value) => { setCohort(value); setSelected(null); }} useCounts={useCounts} uses={uses} onToggleUse={toggleUse} onClearUses={() => setUses(new Set())} onResetFilters={resetFilters} />}
+              {tab !== 'measures' && selectedAssessment && <div className="detail-float"><BuildingDetail assessment={selectedAssessment} onClose={() => setSelected(null)} /></div>}
+            </div>
+          </section>
+
+          <section className="building-list" data-tour="roadmap">
+            <div className="list-heading"><div><h2>{cohort === 'safe' ? 'Bâtiments à surveiller' : 'Votre feuille de route'}</h2><p>{program.length} bâtiments · {cohort === 'safe' ? 'pas de rénovation simulée' : 'échéance, critères puis impact carbone'}</p></div><div className="export-actions"><button className="export-button" disabled={program.length === 0} onClick={() => exportProgram(program, strategy)}><Download size={15} /> Export CSV</button><button className="export-button" disabled={filtered.length === 0} onClick={exportReport}><FileText size={15} /> Rapport HTML</button></div></div>
+            <div className="table-scroll"><table><thead><tr><th>Bâtiment / quartier</th><th>Échéance</th><th>IDC<small>MJ/m²/an</small></th><th>État</th><th>CO₂<small>kg/m²/an</small></th><th>Motif principal</th><th aria-label="Actions" /></tr></thead><tbody>
+>>>>>>> origin/3d-view
               {program.map((item) => <tr key={item.building.id} className={selected === item.building.id ? 'selected-row' : ''}>
                 <td><button className="building-name" onClick={() => { setSelected(item.building.id); if (tab === 'map') window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{item.building.name}<small>{item.building.district} · {item.building.use}</small></button></td>
                 <td><span className={`table-status ${item.cohort}`}><span />{item.dueYear ?? 'Suivi'}</span></td>
                 <td>{item.building.idc}</td><td>{number(item.building.condition, 2)}</td><td>{number(item.building.carbonIntensity, 1)}</td>
                 <td><span className="reason-tag">{item.triggers[0] ? CRITERIA[item.triggers[0]] : 'Aucun seuil franchi'}</span></td>
+<<<<<<< HEAD
                 <td><button className="icon-button" aria-label={`Ouvrir ${item.building.name}`} onClick={() => setSelected(item.building.id)}><ChevronRight size={16} /></button></td>
+=======
+                <td className="row-actions">
+                  <button className="icon-button" aria-label={`Voir ${item.building.name} sur la carte`} title="Voir sur la carte" onClick={() => { setSelected(item.building.id); setTab('map'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}><MapPin size={16} /></button>
+                  <button className="icon-button" aria-label={`Mesures de rénovation de ${item.building.name}`} title="Mesures de rénovation" onClick={() => { setSelected(item.building.id); setTab('measures'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}><Wrench size={16} /></button>
+                </td>
+>>>>>>> origin/3d-view
               </tr>)}
             </tbody></table></div>
             {program.length === 0 && <div className="empty-state"><Building2 size={27} /><h3>Aucun bâtiment dans cette sélection</h3><p>Changez d’horizon, de catégorie ou de filtre pour explorer le parc.</p></div>}
@@ -303,7 +522,11 @@ export default function App() {
         </div>
       </div>
     </main>
+<<<<<<< HEAD
     <footer className="site-footer"><span>énergiACK <span>·</span> Défi 5 — Sortir des énergies fossiles</span><span>Données SITG / QuantHome · fond de carte swisstopo</span></footer>
+=======
+    <footer className="site-footer"><span>StratoRéno <span>·</span> Défi 5 — Sortir des énergies fossiles</span><span>Données SITG / QuantHome · fond de carte swisstopo</span></footer>
+>>>>>>> origin/3d-view
     <Tour open={tourOpen} onClose={() => setTourOpen(false)} onEnter={onTourEnter} />
   </div>;
 }

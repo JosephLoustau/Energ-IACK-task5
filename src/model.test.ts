@@ -224,6 +224,38 @@ describe('Rénovation et indicateurs', () => {
     expect(plan.after.rentGain).toBeCloseTo(plan.rent.gain);
   });
 
+  it('adapte le plan aux mesures cochées', () => {
+    const all = planRenovation(building);
+    expect(all.measures.every((m) => m.included)).toBe(true);
+    const some = planRenovation(building, new Set(['facade', 'pac']));
+    expect(some.measures.map((m) => m.id)).toEqual(all.measures.map((m) => m.id));
+    expect(some.measures.filter((m) => m.included).map((m) => m.id)).toEqual(['facade', 'pac']);
+    expect(some.capex).toBeCloseTo(all.measures.filter((m) => ['facade', 'pac'].includes(m.id)).reduce((sum, m) => sum + m.cost, 0));
+    expect(some.after.envelopeCost).toBeCloseTo(all.measures.find((m) => m.id === 'facade')!.annualCost);
+    expect(some.after.idc).toBeGreaterThan(all.after.idc);
+    expect(some.pv.kwc).toBe(0);
+
+    const none = planRenovation(building, new Set());
+    expect(none.capex).toBe(0);
+    expect(none.after.renovationCost).toBe(0);
+    expect(none.after.idc).toBeCloseTo(none.before.idc);
+    expect(none.after.carbon).toBeCloseTo(none.before.carbon);
+    expect(none.after.total).toBeCloseTo(none.before.total);
+  });
+
+  it('exige la PAC pour le photovoltaïque et limite les loyers aux travaux d’enveloppe', () => {
+    const noPump = planRenovation({ ...building, rentResidential: 300_000 }, new Set(['pv', 'fenetres']));
+    const pv = noPump.measures.find((m) => m.id === 'pv')!;
+    expect(pv.included).toBe(false);
+    expect(pv.note).toContain('pompe à chaleur');
+    expect(noPump.pv.production).toBe(0);
+    expect(noPump.rent.gain).toBeGreaterThan(0);
+    const equipmentOnly = planRenovation({ ...building, rentResidential: 300_000 }, new Set(['pac', 'pv']));
+    expect(equipmentOnly.rent).toEqual({ base: 300_000, loss: 0, gain: 0, net: 0 });
+    expect(equipmentOnly.pv.kwc).toBeGreaterThan(0);
+    expect(equipmentOnly.after.rentLoss).toBe(0);
+  });
+
   it('interpole le coût de PAC sur la figure 47 de LICS2022', () => {
     expect(heatPumpCost(3)).toBeCloseTo(47_900);
     expect(heatPumpCost(5)).toBeCloseTo(47_900);

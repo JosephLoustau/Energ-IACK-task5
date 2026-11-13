@@ -1,4 +1,4 @@
-# Cahier des charges — ÉnergiACK, MVP stratégique
+# Cahier des charges — StratoRéno, MVP stratégique
 
 ## Objectif
 
@@ -24,9 +24,9 @@ données fictives. Elle ne décide pas des crédits à voter.
 
 | Stratégie | État Stratus | IDC (MJ/m²/an) | CO₂e (kg/m²/an) |
 |---|---:|---:|---:|
-| 1. Conservatoire / législative à valider | < 0,5 | > 600 | > 20 |
-| 2. Visionnaire / accélération carbone | < 0,7 | > 450 | > 6 |
-| 3. Personnalisée | Curseur 0–1 | Curseur 200–1 000 | Curseur 1–80 |
+| 1. Base légale (à valider) | < 0,5 | > 600 | > 20 |
+| 2. Exemplaire | < 0,7 | > 450 | > 6 |
+| 3. Modulable | Curseur 0–1 | Curseur 200–1 000 | Curseur 1–80 |
 
 Les valeurs prédéfinies sont celles demandées par l'équipe. Elles ne
 constituent pas des seuils réglementaires vérifiés.
@@ -35,6 +35,15 @@ La stratégie personnalisée copie l'une des deux bases. Les stratégies
 prédéfinies restent intactes. Changer la base ou réinitialiser supprime
 les modifications et les changements futurs de la stratégie
 personnalisée ; ce comportement est annoncé dans l'interface.
+
+Dans le scénario modulable, chaque plage affiche des repères fixes
+S1/S2 et les valeurs des deux scénarios prédéfinis. Ils restent
+identiques lorsque le scénario modulable change et ne sont pas des
+curseurs supplémentaires. Les seuils sont séparés en blocs.
+
+Accents des scénarios, repris dans les curseurs et les KPI :
+Base légale rouge, Exemplaire vert, Modulable bleu.
+Ces accents sont indépendants des couleurs d'échéance.
 
 ## Classification
 
@@ -48,9 +57,10 @@ L'application cherche le premier franchissement chaque année de 2026
 à 2036 :
 
 - Rouge : franchissement en 2026.
-- Orange : premier franchissement de 2027 à 2031 inclus.
-- Jaune : premier franchissement de 2032 à 2036 inclus.
-- Vert : aucun franchissement identifié jusqu'en 2036 inclus.
+- Jaune : premier franchissement de 2027 à 2031 inclus.
+- Vert : premier franchissement de 2032 à 2036 inclus.
+- Bleu : aucun franchissement identifié jusqu'en 2036 inclus ;
+  surveillance au-delà de dix ans, sans date de travaux prédite.
 
 La couleur représente une échéance **sans travaux**, pas l'état après
 rénovation ni la conformité du bâtiment à la date sélectionnée.
@@ -118,18 +128,29 @@ Chaque intervention est comptée une seule fois dans le cumul. Le
 gain CO₂ indique le potentiel annuel lorsque les interventions sont
 achevées, pas des tonnes cumulées sur cinq ou dix ans.
 
-Les bâtiments verts n'ont pas de travaux simulés. Une sélection vide
+Les bâtiments gris n'ont pas de travaux simulés. Une sélection vide
 affiche des coûts/gains nuls et des moyennes non applicables, pas
 des valeurs `NaN` ni un état moyen fictif.
 
 ## Interactions
 
 - Choix des trois stratégies.
+- Widgets KPI agrandis, avec nombre de bâtiments et surface sélectionnée
+  dans un format plus compact ; en gris, périmètre de surveillance.
+- Même code couleur sur carte, diagramme, légende et fiches : rouge
+  immédiat, jaune cinq ans, vert dix ans, gris à 30 % au-delà de dix ans.
+- Symboles d'affectation et tailles de référence de la légende en bleu.
+- Logo officiel de Genève conservé sans altération, identité numérique
+  jaune/noir/gris et typographie système de remplacement. Prototype
+  explicitement non officiel.
 - Curseurs et changements futurs dans la stratégie personnalisée.
 - Programme cumulé : aujourd'hui, d'ici 2031, d'ici 2036.
 - Sélection exclusive d'une catégorie en cliquant sa couleur ; un
   second clic revient au cumul actif.
-- Les points hors programme sont atténués mais restent cliquables.
+- Carte et diagramme : les points rouges, jaunes et verts restent à pleine
+  opacité, les points gris au-delà de dix ans à 30 %, indépendamment de
+  l'horizon du programme et après modification des seuils.
+  Seuls les filtres explicites masquent des bâtiments.
 - Recherche par nom fictif, quartier ou identifiant ; filtre par usage.
 - Carte, liste et KPI utilisent le même périmètre de filtres.
 - Clic sur un marqueur ou une ligne : fiche bâtiment et justification.

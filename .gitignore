@@ -4,6 +4,11 @@ node_modules/
 !.env.example
 playwright-report/
 test-results/
+node_modules/
+.env.*
+!.env.example
+playwright-report/
+test-results/
 __pycache__/
 *.py[codz]
 *$py.class
@@ -223,6 +228,14 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+.DS_Store
+
+# local only
+context.md
+data/
+public/data/
+src/buildings.generated.json
+/ville_geneve_core.geojson
 
 # local only
 context.md
