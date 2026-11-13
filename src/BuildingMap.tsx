@@ -18,7 +18,7 @@ const lats = BUILDINGS.map((b) => b.coordinates[0]);
 const BOUNDS: LngLatBoundsLike = [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]];
 const ICON_PX = 44; // pixelRatio 2 → 22 px à l'échelle 1
 const BLOCKS_URL = '/data/ville_geneve_3d.geojson'; // produit par stock.py (npm run data)
-const BLOCK_LAYERS = ['context-3d', 'city-3d', 'pins'];
+const BLOCK_LAYERS = ['context-3d', 'city-3d', 'pins', 'selection-disc', 'selection-ring'];
 // Passage progressif plan → 3D : à Z_FLAT et en dessous, carte à plat ; à Z_FULL, volumes et inclinaison complets.
 const Z_FLAT = 13;
 const Z_FULL = 16;
@@ -45,7 +45,53 @@ const pinColor = (selected: string | null) =>
 const symbolOpacity = (fade: boolean) => (fade
   ? ['interpolate', ['linear'], ['zoom'], PIN_IN, ['case', ['==', ['get', 'muted'], 1], 0.3, 1], PIN_IN + 1, 0]
   : ['case', ['==', ['get', 'muted'], 1], 0.3, 1]) as never;
-const haloOpacity = (fade: boolean) => (fade ? ['interpolate', ['linear'], ['zoom'], PIN_IN, 0.55, PIN_IN + 1, 0] : 0.55) as never;
+const fadeOut = (value: number, fade: boolean) =>
+  (fade ? ['interpolate', ['linear'], ['zoom'], PIN_IN, value, PIN_IN + 1, 0] : value) as never;
+
+// Sélection en 3D : le cercle au sol devient un disque jaune cerclé de noir, au pied du bâtiment.
+const RING_WIDTH = 1.5;   // m
+const RING_MARGIN = 4;    // m au-delà de l'emprise
+
+/** Cercle de rayon r mètres (sens trigonométrique, ou horaire pour un trou). */
+function circle(lng: number, lat: number, r: number, hole = false, n = 48) {
+  const mLat = 1 / 111320;
+  const mLng = 1 / (111320 * Math.cos(lat * Math.PI / 180));
+  const ring = Array.from({ length: n + 1 }, (_, i) => {
+    const a = (hole ? -1 : 1) * 2 * Math.PI * (i % n) / n;
+    return [lng + Math.cos(a) * r * mLng, lat + Math.sin(a) * r * mLat];
+  });
+  return ring;
+}
+
+/** Rayon (m) de l'emprise du volume 3D autour du point, ou null si la tuile n'est pas chargée. */
+function footprintRadius(map: maplibregl.Map, id: string, lng: number, lat: number) {
+  const mLng = 111320 * Math.cos(lat * Math.PI / 180);
+  let r = 0;
+  for (const f of map.querySourceFeatures('city-blocks', { filter: ['==', ['to-string', ['id']], id] })) {
+    const g = f.geometry;
+    const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
+    for (const poly of polys) for (const [x, y] of poly[0]!) {
+      r = Math.max(r, Math.hypot((x! - lng) * mLng, (y! - lat) * 111320));
+    }
+  }
+  return r || null;
+}
+
+function selectionRing(map: maplibregl.Map, id: string | null) {
+  const b = BUILDINGS.find((x) => x.id === id);
+  if (!b || !id) return { type: 'FeatureCollection' as const, features: [] };
+  const [lat, lng] = b.coordinates;
+  const R = (footprintRadius(map, id, lng, lat) ?? 6 + 6 * symbolScale(b.area)) + RING_MARGIN;
+  const feature = (part: string, coordinates: number[][][]): GeoJSON.Feature<GeoJSON.Polygon> =>
+    ({ type: 'Feature', geometry: { type: 'Polygon', coordinates }, properties: { part } });
+  return {
+    type: 'FeatureCollection' as const,
+    features: [
+      feature('disc', [circle(lng, lat, R - RING_WIDTH)]),
+      feature('ring', [circle(lng, lat, R), circle(lng, lat, R - RING_WIDTH, true)]),
+    ],
+  };
+}
 
 /** Forme (repère [-1, 1], y vers le bas) → anneau lng/lat de rayon r mètres autour du point. */
 function shapeRing(shape: [number, number][], lng: number, lat: number, r: number) {
@@ -98,6 +144,16 @@ function addBlocks(map: maplibregl.Map) {
       'fill-extrusion-opacity': 0.95,
     },
   }, 'selected-halo');
+  map.addSource('selection', { type: 'geojson', data: selectionRing(map, null) });
+  for (const part of ['disc', 'ring']) map.addLayer({
+    id: `selection-${part}`, type: 'fill-extrusion', source: 'selection', layout: { visibility: 'none' },
+    filter: ['==', ['get', 'part'], part],
+    paint: {
+      'fill-extrusion-color': part === 'disc' ? SELECTED : '#111',
+      'fill-extrusion-height': part === 'disc' ? 0.3 : 1,
+      'fill-extrusion-opacity': ['interpolate', ['linear'], ['zoom'], PIN_IN, 0, PIN_IN + 1, part === 'disc' ? 0.55 : 1],
+    },
+  }, 'context-3d');
   map.addSource('pins', { type: 'geojson', data: toPins([], new Set()) });
   map.addLayer({
     id: 'pins', type: 'fill-extrusion', source: 'pins', layout: { visibility: 'none' },
@@ -239,6 +295,16 @@ export default function BuildingMap({ assessments, mutedIds, selected, active, o
     if (building) map.easeTo({ center: [building.coordinates[1], building.coordinates[0]], duration: 500 });
   }, [selected, ready]);
 
+  // Anneau 3D : recalculé quand les volumes sont chargés (l'emprise vient de leurs tuiles).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    const update = () => (map.getSource('selection') as GeoJSONSource).setData(selectionRing(map, selected));
+    update();
+    map.once('idle', update);
+    return () => { map.off('idle', update); };
+  }, [selected, is3d, ready]);
+
   useEffect(() => { if (active) mapRef.current?.resize(); }, [active]);
 
   useEffect(() => {
@@ -246,7 +312,8 @@ export default function BuildingMap({ assessments, mutedIds, selected, active, o
     if (!map || !ready) return;
     for (const id of BLOCK_LAYERS) map.setLayoutProperty(id, 'visibility', is3d ? 'visible' : 'none');
     map.setPaintProperty('buildings', 'icon-opacity', symbolOpacity(is3d));
-    map.setPaintProperty('selected-halo', 'circle-opacity', haloOpacity(is3d));
+    map.setPaintProperty('selected-halo', 'circle-opacity', fadeOut(0.55, is3d));
+    map.setPaintProperty('selected-halo', 'circle-stroke-opacity', fadeOut(1, is3d));
     map.easeTo({ pitch: is3d ? pitchForZoom(map.getZoom()) : 0, duration: 600 });
   }, [is3d, ready]);
 

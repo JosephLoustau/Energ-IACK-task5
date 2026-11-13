@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import {
   ArrowRight, Building2, CalendarDays, Check, ChevronRight,
-  CircleHelp, Download, FileText, Flame, Leaf, MapPin, Plus, RotateCcw, Search,
+  CircleHelp, FileText, Flame, Leaf, MapPin, Plus, RotateCcw, Search,
   ChartScatter, Map as MapIcon, PlayCircle, ShieldCheck, SlidersHorizontal, Sparkles, Trash2, TrendingUp, Wallet, X,
 } from 'lucide-react';
 import Blason from './Blason';
@@ -121,29 +121,6 @@ function BuildingDetail({ assessment, onClose }: { assessment: Assessment; onClo
   </section>;
 }
 
-function exportProgram(program: Assessment[], strategy: Strategy) {
-  const rows = [
-    ['Données SITG / QuantHome (indice d’état = proxy)', `Stratégie : ${strategy.name}`, `Année de référence : ${BASE_YEAR}`],
-    ['ID', 'Adresse', 'Quartier', 'Usage', 'Échéance', 'Motifs', 'Surface m²', 'IDC MJ/m²/an', 'CO2 kg/m²/an', 'État actuel', 'État à échéance', 'Enveloppe CHF', 'Gain tCO2e/an'],
-    ...program.map((item) => {
-      const renovation = item.dueYear === null ? null : renovationFor(item.building, item.dueYear);
-      return [
-        item.building.id, item.building.name, item.building.district, item.building.use,
-        item.dueYear ?? 'Surveillance', item.triggers.map((criterion) => CRITERIA[criterion]).join(', '),
-        item.building.area, item.building.idc, item.building.carbonIntensity, item.building.condition,
-        item.dueCondition.toFixed(3), renovation?.cost.toFixed(0) ?? '', renovation?.carbonSaved.toFixed(1) ?? '',
-      ];
-    }),
-  ];
-  const content = '\uFEFF' + rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(';')).join('\r\n');
-  const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8' }));
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = `energiack-${strategy.id}-donnees-fictives.csv`;
-  anchor.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
 function ShapeIcon({ use, color = '#fff', size = 16 }: { use: string; color?: string; size?: number }) {
   return <svg width={size} height={size} viewBox="-1.3 -1.3 2.6 2.6" aria-hidden="true"><path d={SHAPES[shapeFor(use)]} fill={color} stroke="#111" strokeWidth="0.16" strokeLinejoin="round" /></svg>;
 }
@@ -221,7 +198,7 @@ export default function App() {
   function exportReport() {
     const strategies = strategyId === 'custom' ? [PRESETS.conservative, PRESETS.ambitious, custom] : [PRESETS.conservative, PRESETS.ambitious];
     const scope = [uses.size ? [...uses].join(', ') : 'tout le parc', query.trim() && `recherche « ${query.trim()} »`].filter(Boolean).join(' · ');
-    new HtmlReport({ buildings: filtered.map((item) => item.building), strategies, selectedStrategy: strategy.id, scopeLabel: scope }).download();
+    new HtmlReport({ buildings: filtered.map((item) => item.building), strategies, selectedStrategy: strategy.id, scopeLabel: scope }).open();
   }
   const onTourEnter = useCallback((action: 'tab-map' | 'tab-chart') => setTab(action === 'tab-map' ? 'map' : 'chart'), []);
 
@@ -231,6 +208,7 @@ export default function App() {
       <div className="topbar-right">
         <span className="topbar-count"><strong>{BUILDINGS.length}</strong> bâtiments de la Ville</span>
         <button className="help-button" onClick={() => setTourOpen(true)}><PlayCircle size={16} /> Visite guidée</button>
+        <button className="help-button" disabled={filtered.length === 0} onClick={exportReport}><FileText size={16} /> Rapport HTML</button>
         <button className="help-button" onClick={() => setShowAssumptions(true)} aria-expanded={showAssumptions}><CircleHelp size={16} /> Méthode & hypothèses</button>
       </div>
     </header>
@@ -303,7 +281,7 @@ export default function App() {
           </section>
 
           <section className="building-list" data-tour="roadmap">
-            <div className="list-heading"><div><h2>{cohort === 'safe' ? 'Bâtiments à surveiller' : 'Votre feuille de route'}</h2><p>{program.length} bâtiments · {cohort === 'safe' ? 'pas de rénovation simulée' : 'échéance, critères puis impact carbone'}</p></div><div className="export-actions"><button className="export-button" disabled={program.length === 0} onClick={() => exportProgram(program, strategy)}><Download size={15} /> Export CSV</button><button className="export-button" disabled={filtered.length === 0} onClick={exportReport}><FileText size={15} /> Rapport HTML</button></div></div>
+            <div className="list-heading"><div><h2>{cohort === 'safe' ? 'Bâtiments à surveiller' : 'Votre feuille de route'}</h2><p>{program.length} bâtiments · {cohort === 'safe' ? 'pas de rénovation simulée' : 'échéance, critères puis impact carbone'}</p></div></div>
             <div className="table-scroll"><table><thead><tr><th>Bâtiment / quartier</th><th>Échéance</th><th>IDC<small>MJ/m²/an</small></th><th>État</th><th>CO₂<small>kg/m²/an</small></th><th>Motif principal</th><th aria-label="Ouvrir la fiche" /></tr></thead><tbody>
               {program.map((item) => <tr key={item.building.id} className={selected === item.building.id ? 'selected-row' : ''}>
                 <td><button className="building-name" onClick={() => { setSelected(item.building.id); if (tab === 'map') window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{item.building.name}<small>{item.building.district} · {item.building.use}</small></button></td>
