@@ -26,7 +26,7 @@ const money = (value: number) => value >= 1_000_000
   : number(value);
 const cohortOrder: Cohort[] = ['now', 'five', 'ten', 'safe'];
 
-function ThresholdControls({ value, editable, onChange }: {
+export function ThresholdControls({ value, editable, onChange }: {
   value: Thresholds; editable: boolean; onChange: (value: Thresholds) => void;
 }) {
   const fields = [
@@ -38,8 +38,25 @@ function ThresholdControls({ value, editable, onChange }: {
     {fields.map(({ key, title, unit, min, max, step, sign, description, icon: Icon }) => <div className="threshold" key={key}>
       <div className="threshold-title"><Icon size={17} /><label htmlFor={`threshold-${key}`}>{title}</label></div>
       <div className="threshold-value"><strong>{sign} {number(value[key], key === 'condition' ? 2 : 0)}</strong><span>{unit}</span></div>
-      <input id={`threshold-${key}`} type="range" min={min} max={max} step={step} disabled={!editable}
-        value={value[key]} onChange={(event) => onChange({ ...value, [key]: Number(event.target.value) })} />
+      <div className={`range-control ${editable ? 'with-references' : ''}`}>
+        <input id={`threshold-${key}`} type="range" min={min} max={max} step={step} disabled={!editable}
+          aria-valuetext={`${number(value[key], key === 'condition' ? 2 : 0)} ${unit}`}
+          value={value[key]} onChange={(event) => onChange({ ...value, [key]: Number(event.target.value) })} />
+        {editable && <div className="range-references">
+          {(['conservative', 'ambitious'] as const).map((id, index) => <span key={id}
+            className={`range-reference ${id}`} role="img"
+            aria-label={`Scénario ${index + 1}, ${PRESETS[id].name} : ${number(PRESETS[id].thresholds[key], key === 'condition' ? 2 : 0)} ${unit}`}
+            data-testid={`reference-${key}-${id}`}
+            style={{ left: `${(PRESETS[id].thresholds[key] - min) / (max - min) * 100}%` }}
+          ><span>{index + 1}</span></span>)}
+        </div>}
+      </div>
+      {editable && <div className="reference-values">
+        {(['conservative', 'ambitious'] as const).map((id, index) => <span key={id} title={PRESETS[id].name}>
+          <b className={`reference-key ${id}`}>S{index + 1}</b>
+          <span>{number(PRESETS[id].thresholds[key], key === 'condition' ? 2 : 0)} <small>{unit}</small></span>
+        </span>)}
+      </div>}
       <small>{description}</small>
     </div>)}
   </div>;
@@ -138,7 +155,7 @@ function exportProgram(program: Assessment[], strategy: Strategy) {
   const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8' }));
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `energiack-${strategy.id}-donnees-fictives.csv`;
+  anchor.download = `stratoreno-${strategy.id}-donnees-fictives.csv`;
   anchor.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
@@ -147,30 +164,33 @@ function ShapeIcon({ use, color = '#fff', size = 16 }: { use: string; color?: st
   return <svg width={size} height={size} viewBox="-1.3 -1.3 2.6 2.6" aria-hidden="true"><path d={SHAPES[shapeFor(use)]} fill={color} stroke="#111" strokeWidth="0.16" strokeLinejoin="round" /></svg>;
 }
 
-function Legend({ counts, cohort, onCohort, useCounts, uses, onToggleUse, onClearUses }: {
+function Legend({ counts, cohort, onCohort, useCounts, uses, onToggleUse, onClearUses, onResetFilters }: {
   counts: Record<string, number>; cohort: Cohort | null; onCohort: (value: Cohort | null) => void;
   useCounts: Record<string, number>; uses: Set<string>; onToggleUse: (use: string) => void; onClearUses: () => void;
+  onResetFilters: () => void;
 }) {
   const [open, setOpen] = useState(true);
   return <aside className={`legend-panel ${open ? '' : 'collapsed'}`} data-tour="legend" aria-label="Légende et filtres">
     <button className="legend-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>Légende & filtres <ChevronRight size={14} /></button>
+    <button className="legend-reset" onClick={onResetFilters} title="Effacer l’échéance, les affectations et la recherche"><RotateCcw size={13} /> Réinitialiser les filtres</button>
     {open && <>
       <h4>Échéance <small>cliquer pour isoler</small></h4>
       <div className="legend-list">
-        {cohortOrder.map((key) => <button key={key} aria-pressed={cohort === key} className={cohort === key ? 'active' : ''} onClick={() => onCohort(cohort === key ? null : key)}>
-          <span className="swatches">{key === 'safe' ? <i style={{ background: '#fff' }} /> : SHADES[key].map((color) => <i key={color} style={{ background: color }} />)}</span>
+        {cohortOrder.map((key) => <button key={key} data-cohort={key} aria-pressed={cohort === key} className={cohort === key ? 'active' : ''} onClick={() => onCohort(cohort === key ? null : key)}>
+          <span className="swatches">{[...new Set(SHADES[key])].map((color) => <i key={color} style={{ background: color, opacity: COHORTS[key].opacity }} />)}</span>
           <span>{COHORTS[key].short}</span><strong>{counts[key]}</strong>
         </button>)}
       </div>
       <p className="legend-hint">Les trois teintes = 1, 2 ou 3 critères dépassés (IDC, CO₂, vétusté).</p>
+      <p className="legend-hint">Rouge, jaune et vert : pleine opacité. Au-delà de 10 ans : gris à 30 %. L’horizon des KPI ne masque aucun point. « Sous 10 ans » couvre les besoins entre 5 et 10 ans.</p>
       <h4>Affectation <small>{uses.size ? `${uses.size} sélectionnée(s)` : 'toutes'}</small>{uses.size > 0 && <button className="text-button" onClick={onClearUses}>Tout afficher</button>}</h4>
       <div className="legend-list">
-        {BUILDING_USES.map((use) => <button key={use} aria-pressed={uses.has(use)} className={uses.has(use) ? 'active' : ''} onClick={() => onToggleUse(use)}>
-          <ShapeIcon use={use} color="#f6c51c" /><span>{use}</span><strong>{useCounts[use] ?? 0}</strong>
+        {BUILDING_USES.map((use) => <button key={use} aria-pressed={uses.has(use)} className={`use-filter ${uses.has(use) ? 'active' : ''}`} onClick={() => onToggleUse(use)}>
+          <ShapeIcon use={use} color="#347bc1" /><span>{use}</span><strong>{useCounts[use] ?? 0}</strong>
         </button>)}
       </div>
       <h4>Taille <small>surface de référence énergétique</small></h4>
-      <div className="size-legend">{[200, 2000, 10000, 25000].map((sre) => <span key={sre}><svg width="40" height="40" viewBox="-20 -20 40 40" aria-hidden="true"><circle r={11 * symbolScale(sre)} fill="#f6c51c" stroke="#111" strokeWidth="1.3" /></svg>{number(sre)} m²</span>)}</div>
+      <div className="size-legend">{[200, 2000, 10000, 25000].map((sre) => <span key={sre}><svg width="40" height="40" viewBox="-20 -20 40 40" aria-hidden="true"><circle r={11 * symbolScale(sre)} fill="#347bc1" stroke="#111" strokeWidth="1.3" /></svg>{number(sre)} m²</span>)}</div>
     </>}
   </aside>;
 }
@@ -178,7 +198,7 @@ function Legend({ counts, cohort, onCohort, useCounts, uses, onToggleUse, onClea
 export default function App() {
   const [strategyId, setStrategyId] = useState<StrategyId>('conservative');
   const [customBase, setCustomBase] = useState<'conservative' | 'ambitious'>('conservative');
-  const [custom, setCustom] = useState<Strategy>({ ...PRESETS.conservative, id: 'custom', name: 'Personnalisée', thresholds: { ...PRESETS.conservative.thresholds }, changes: [] });
+  const [custom, setCustom] = useState<Strategy>({ ...PRESETS.conservative, id: 'custom', name: 'Modulable', thresholds: { ...PRESETS.conservative.thresholds }, changes: [] });
   const [horizon, setHorizon] = useState(0);
   const [cohort, setCohort] = useState<Cohort | null>(null);
   const [uses, setUses] = useState<Set<string>>(new Set());
@@ -195,10 +215,8 @@ export default function App() {
   ), [portfolio, uses, query]);
   const program = selectProgram(filtered, horizon, cohort);
   const metrics = programMetrics(program);
-  const programIds = useMemo(() => new Set(program.map((item) => item.building.id)), [program]);
-  // Une catégorie choisie n'affiche que ses points ; sinon les points hors horizon sont atténués.
+  const programArea = program.reduce((sum, item) => sum + item.building.area, 0);
   const visible = useMemo(() => cohort ? filtered.filter((item) => item.cohort === cohort) : filtered, [filtered, cohort]);
-  const mutedIds = useMemo(() => cohort ? new Set<string>() : new Set(filtered.filter((item) => !programIds.has(item.building.id)).map((item) => item.building.id)), [filtered, cohort, programIds]);
   const selectedAssessment = visible.find((item) => item.building.id === selected);
   const selectionLabel = cohort ? COHORTS[cohort].label
     : horizon === 0 ? 'Programme immédiat' : `Programme cumulé d’ici ${BASE_YEAR + horizon}`;
@@ -211,17 +229,23 @@ export default function App() {
 
   function resetCustom(base = customBase) {
     setCustomBase(base);
-    setCustom({ ...PRESETS[base], id: 'custom', name: 'Personnalisée', thresholds: { ...PRESETS[base].thresholds }, changes: [] });
+    setCustom({ ...PRESETS[base], id: 'custom', name: 'Modulable', thresholds: { ...PRESETS[base].thresholds }, changes: [] });
   }
   function toggleUse(use: string) {
     setUses((current) => { const next = new Set(current); if (!next.delete(use)) next.add(use); return next; });
     setSelected(null);
   }
+  function resetFilters() {
+    setCohort(null);
+    setUses(new Set());
+    setQuery('');
+    setSelected(null);
+  }
   const onTourEnter = useCallback((action: 'tab-map' | 'tab-chart') => setTab(action === 'tab-map' ? 'map' : 'chart'), []);
 
-  return <div className="app-shell">
+  return <div className="app-shell" data-strategy={strategyId}>
     <header className="topbar">
-      <a className="brand" href="#main"><Blason size={34} /><span>énergi<span className="brand-emphasis">ACK</span><small>VILLE DE GENÈVE · SORTIE DES ÉNERGIES FOSSILES</small></span></a>
+      <a className="brand" href="#main" aria-label="StratoRéno — tableau de bord"><Blason /><span>Strato<span className="brand-emphasis">Réno</span><small>STRATÉGIE DE RÉNOVATION · PROTOTYPE NON OFFICIEL</small></span></a>
       <div className="topbar-right">
         <span className="topbar-count"><strong>{BUILDINGS.length}</strong> bâtiments de la Ville</span>
         <button className="help-button" onClick={() => setTourOpen(true)}><PlayCircle size={16} /> Visite guidée</button>
@@ -238,7 +262,7 @@ export default function App() {
           <div><h3>Projection sans travaux</h3><p>État(t) = max(0, état initial − dégradation annuelle × années). IDC et CO₂ constants. Un changement de seuil s’applique dès son année et reste actif jusqu’au suivant. Aucun calendrier légal chargé.</p></div>
           <div><h3>Intervention générique</h3><p>Chaleur −{percent(RENOVATION.heatReduction)} ; état relevé à au moins {number(RENOVATION.targetCondition, 2)}. Carbone après = minimum du carbone actuel et IDC après ÷ 3,6 × {number(RENOVATION.lowCarbonFactor, 3)} kgCO₂e/kWh.</p></div>
           <div><h3>Coûts et agrégation</h3><p>Coût = surface × [{RENOVATION.fixedCostPerM2} + {RENOVATION.conditionCostPerM2} × (1 − état à l’échéance)] CHF/m². Moyennes pondérées par la surface, même périmètre avant/après. Hors inflation, subventions, frais d’exploitation et carbone des travaux.</p></div>
-          <div><h3>Lecture de la carte</h3><p>Taille du symbole ∝ √SRE, forme = affectation, couleur = échéance (rouge : immédiat, jaune : sous 5 ans, gris : sous 10 ans, blanc : surveillance), teinte plus foncée = plus de critères dépassés.</p></div>
+          <div><h3>Lecture de la carte</h3><p>Taille du symbole ∝ √SRE, forme = affectation, couleur = échéance (rouge : immédiat, jaune : sous 5 ans, vert : sous 10 ans, gris à 30 % : surveillance au-delà de 10 ans), teinte plus foncée = plus de critères dépassés. Le gris ne prédit pas une date de rénovation après 2036.</p></div>
         </div>
         <p className="assumption-footer">Les KPI sont le potentiel annuel des travaux achevés, pas un cumul des émissions évitées. La faisabilité technique, le patrimoine protégé et les contraintes de réseau ne sont pas modélisés. La maquette ne démontre pas la sortie complète des fossiles.</p>
       </section>
@@ -251,32 +275,41 @@ export default function App() {
             <div className="section-label"><SlidersHorizontal size={16} /> SCÉNARIO</div>
             <div className="strategy-options">
               {([
-                { id: 'conservative', title: 'Conservatoire', subtitle: 'Cadre législatif à valider', icon: ShieldCheck, index: '01' },
-                { id: 'ambitious', title: 'Accélération carbone', subtitle: 'Une ambition visionnaire', icon: Sparkles, index: '02' },
-                { id: 'custom', title: 'À votre mesure', subtitle: 'Seuils et trajectoire libres', icon: SlidersHorizontal, index: '03' },
-              ] as const).map(({ id, title, subtitle, icon: Icon, index }) => <button key={id} className={`strategy-option ${strategyId === id ? 'active' : ''}`} aria-pressed={strategyId === id} onClick={() => setStrategyId(id)}>
+                { id: 'conservative', title: PRESETS.conservative.name, subtitle: 'Cadre législatif à valider', icon: ShieldCheck, index: '01' },
+                { id: 'ambitious', title: PRESETS.ambitious.name, subtitle: 'Une ambition visionnaire', icon: Sparkles, index: '02' },
+                { id: 'custom', title: 'Modulable', subtitle: 'Seuils et trajectoire libres', icon: SlidersHorizontal, index: '03' },
+              ] as const).map(({ id, title, subtitle, icon: Icon, index }) => <button key={id} data-strategy={id} className={`strategy-option ${strategyId === id ? 'active' : ''}`} aria-pressed={strategyId === id} onClick={() => setStrategyId(id)}>
                 <span className="strategy-option-icon"><Icon size={18} /></span><span><strong>{title}</strong><small>{subtitle}</small></span><span className="strategy-option-number">{strategyId === id ? <Check size={17} /> : index}</span>
               </button>)}
             </div>
           </div>
-          {strategyId === 'custom' && <div className="custom-base"><label htmlFor="custom-base">Partir de la stratégie</label><select id="custom-base" value={customBase} onChange={(event) => resetCustom(event.target.value === 'ambitious' ? 'ambitious' : 'conservative')}><option value="conservative">Conservatoire</option><option value="ambitious">Accélération carbone</option></select><small>Changer la base réinitialise les curseurs et les seuils futurs.</small></div>}
+          {strategyId === 'custom' && <div className="custom-base"><label htmlFor="custom-base">Partir du scénario</label><select id="custom-base" value={customBase} onChange={(event) => resetCustom(event.target.value === 'ambitious' ? 'ambitious' : 'conservative')}><option value="conservative">{PRESETS.conservative.name}</option><option value="ambitious">{PRESETS.ambitious.name}</option></select><small>Changer la base réinitialise les curseurs et les seuils futurs.</small></div>}
           <div data-tour="thresholds">
             <div className="threshold-heading"><h3>Seuils en {BASE_YEAR}</h3>{strategyId === 'custom' ? <button className="icon-button" aria-label="Réinitialiser la stratégie personnalisée" onClick={() => resetCustom()}><RotateCcw size={14} /></button> : <span className="fixed-tag">PRÉDÉFINIS</span>}</div>
             <ThresholdControls value={strategy.thresholds} editable={strategyId === 'custom'} onChange={(thresholds) => setCustom({ ...custom, thresholds })} />
             {strategyId !== 'custom' && <button className="text-button customize-link" onClick={() => { resetCustom(strategyId); setStrategyId('custom'); }}>Personnaliser cette stratégie <ArrowRight size={14} /></button>}
           </div>
-          {strategyId === 'custom' ? <FutureThresholds key={customBase} strategy={custom} onChange={setCustom} /> : <div className="calendar-note"><CalendarDays size={17} /><p><strong>Seuils constants par défaut</strong>Aucun calendrier réglementaire chargé. Simulez une évolution dans « À votre mesure ».</p></div>}
+          {strategyId === 'custom' ? <FutureThresholds key={customBase} strategy={custom} onChange={setCustom} /> : <div className="calendar-note"><CalendarDays size={17} /><p><strong>Seuils constants par défaut</strong>Aucun calendrier réglementaire chargé. Simulez une évolution dans « Modulable ».</p></div>}
           <div className="priority-note"><span className="live-dot" /><p>Un critère suffit à déclencher. <strong>Priorité IDC → état → CO₂</strong></p></div>
         </aside>
 
         <div className="stage">
           <section className="kpi-strip" data-tour="kpis" aria-live="polite" aria-atomic="true" data-testid="kpis">
-            <div className="kpi-title"><div className="section-label">{selectionLabel.toUpperCase()}</div><p>{metrics.count} bât. à rénover · {number(metrics.area)} m²{cohort === 'safe' && ` · ${program.length} en surveillance`}</p></div>
+            <div className="program-summary">
+              <div className="kpi-title">
+                <div className="section-label">IMPACT DU PROGRAMME DE RÉNOVATION</div>
+                <h2>{selectionLabel}</h2>
+                <div className="program-totals">
+                  <div className="program-total"><Building2 size={21} /><strong data-testid="program-count">{number(program.length)}</strong><span>{cohort === 'safe' ? 'bâtiments à surveiller' : 'bâtiments à rénover'}</span></div>
+                  <div className="program-total"><strong data-testid="program-area">{number(programArea)}</strong><span><b>m²</b> {cohort === 'safe' ? 'sous surveillance' : 'concernés'}</span></div>
+                </div>
+              </div>
+              <div className="horizon-control" aria-label="Horizon du programme cumulé">{[0, 5, 10].map((value) => <button key={value} className={cohort === null && horizon === value ? 'active' : ''} aria-pressed={cohort === null && horizon === value} onClick={() => { setHorizon(value); setCohort(null); }}>{value === 0 ? 'Aujourd’hui' : `D’ici ${BASE_YEAR + value}`}</button>)}</div>
+            </div>
             <article className="kpi-card"><div className="kpi-label"><span>Enveloppe</span><Wallet size={14} /></div><div className="kpi-value">{money(metrics.cost)}<small>CHF</small></div></article>
             <article className="kpi-card"><div className="kpi-label"><span>CO₂ évitable / an</span><Leaf size={14} /></div><div className="kpi-value">{number(metrics.carbonSaved)}<small>tCO₂e · {percent(metrics.carbonReduction)}</small></div></article>
             <article className="kpi-card"><div className="kpi-label"><span>IDC moyen</span><Flame size={14} /></div><div className="kpi-value transition-value">{metrics.count ? number(metrics.idcBefore) : '—'}<ArrowRight size={15} /><span>{metrics.count ? number(metrics.idcAfter) : '—'}</span></div></article>
             <article className="kpi-card"><div className="kpi-label"><span>État moyen</span><TrendingUp size={14} /></div><div className="kpi-value transition-value">{metrics.count ? number(metrics.conditionBefore, 2) : '—'}<ArrowRight size={15} /><span>{metrics.count ? number(metrics.conditionAfter, 2) : '—'}</span></div></article>
-            <div className="horizon-control" aria-label="Horizon du programme cumulé">{[0, 5, 10].map((value) => <button key={value} className={cohort === null && horizon === value ? 'active' : ''} aria-pressed={cohort === null && horizon === value} onClick={() => { setHorizon(value); setCohort(null); }}>{value === 0 ? 'Aujourd’hui' : `D’ici ${BASE_YEAR + value}`}</button>)}</div>
           </section>
 
           <section className="view-panel" data-tour="map">
@@ -289,9 +322,9 @@ export default function App() {
               <span className="map-count"><MapPin size={13} /> {visible.length} / {BUILDINGS.length}</span>
             </div>
             <div className="view-body">
-              <div className={`view-pane ${tab === 'map' ? '' : 'hidden'}`}><BuildingMap assessments={visible} mutedIds={mutedIds} selected={selectedAssessment?.building.id ?? null} active={tab === 'map'} onSelect={setSelected} /></div>
-              {tab === 'chart' && <div className="view-pane"><ScatterPlot assessments={visible} mutedIds={mutedIds} selected={selectedAssessment?.building.id ?? null} strategy={strategy} year={BASE_YEAR + horizon} onSelect={setSelected} /></div>}
-              <Legend counts={counts} cohort={cohort} onCohort={(value) => { setCohort(value); setSelected(null); }} useCounts={useCounts} uses={uses} onToggleUse={toggleUse} onClearUses={() => setUses(new Set())} />
+              <div className={`view-pane ${tab === 'map' ? '' : 'hidden'}`}><BuildingMap assessments={visible} selected={selectedAssessment?.building.id ?? null} active={tab === 'map'} onSelect={setSelected} /></div>
+              {tab === 'chart' && <div className="view-pane"><ScatterPlot assessments={visible} selected={selectedAssessment?.building.id ?? null} strategy={strategy} year={BASE_YEAR + horizon} onSelect={setSelected} /></div>}
+              <Legend counts={counts} cohort={cohort} onCohort={(value) => { setCohort(value); setSelected(null); }} useCounts={useCounts} uses={uses} onToggleUse={toggleUse} onClearUses={() => setUses(new Set())} onResetFilters={resetFilters} />
               {selectedAssessment && <div className="detail-float"><BuildingDetail assessment={selectedAssessment} onClose={() => setSelected(null)} /></div>}
             </div>
           </section>
@@ -312,7 +345,7 @@ export default function App() {
         </div>
       </div>
     </main>
-    <footer className="site-footer"><span>énergiACK <span>·</span> Défi 5 — Sortir des énergies fossiles</span><span>Données SITG / QuantHome · fond de carte swisstopo</span></footer>
+    <footer className="site-footer"><span>StratoRéno <span>·</span> Défi 5 — Sortir des énergies fossiles</span><span>Données SITG / QuantHome · fond de carte swisstopo</span></footer>
     <Tour open={tourOpen} onClose={() => setTourOpen(false)} onEnter={onTourEnter} />
   </div>;
 }

@@ -12,11 +12,11 @@ export interface TourStep {
 }
 
 export const TOUR_STEPS: TourStep[] = [
-  { target: 'strategies', title: 'Choisissez un scénario', body: 'Trois approches : Conservatoire, Accélération carbone ou « À votre mesure ». Le scénario fixe les seuils qui déclenchent une rénovation.' },
-  { target: 'thresholds', title: 'Ajustez les curseurs', body: 'IDC, état du bâtiment et intensité carbone : un seul seuil dépassé suffit à rendre un bâtiment prioritaire. En mode personnalisé, les curseurs sont libres.', },
-  { target: 'map', title: 'Lisez la carte', body: 'Chaque point est un bâtiment de la Ville : sa taille suit la surface de référence énergétique, sa forme l’affectation, sa couleur l’échéance et le nombre de critères dépassés.', onEnter: 'tab-map' },
+  { target: 'strategies', title: 'Choisissez un scénario', body: 'Trois approches : Base légale, Exemplaire ou Modulable. Le scénario fixe les seuils qui déclenchent une rénovation.' },
+  { target: 'thresholds', title: 'Ajustez les curseurs', body: 'IDC, état du bâtiment et intensité carbone : un seul seuil dépassé suffit à rendre un bâtiment prioritaire. Les repères S1 et S2 indiquent les valeurs de référence. Dans le scénario Modulable, les curseurs sont libres.', },
+  { target: 'map', title: 'Lisez la carte', body: 'La taille suit la surface énergétique et la forme indique l’affectation. Rouge : immédiat ; jaune : 5 ans ; vert : 10 ans, tous à pleine opacité. Gris à 30 % : surveillance au-delà de 10 ans. Une teinte plus foncée indique davantage de critères dépassés.', onEnter: 'tab-map' },
   { target: 'legend', title: 'Filtrez avec la légende', body: 'Cliquez sur une échéance pour n’afficher que ces bâtiments, ou sur une affectation pour isoler un type d’usage.' },
   { target: 'chart-tab', title: 'Passez au diagramme', body: 'IDC en abscisse, intensité carbone en ordonnée : repérez d’un coup d’œil les bâtiments hors seuils.', onEnter: 'tab-chart' },
-  { target: 'kpis', title: 'Mesurez l’impact', body: 'Coût estimé, CO₂ évitable, IDC et état moyens du programme sélectionné.' },
+  { target: 'kpis', title: 'Mesurez l’impact', body: 'Les widgets montrent le coût estimé, le CO₂ évitable, l’IDC et l’état moyens. Leur couleur suit le scénario : rouge pour Base légale, vert pour Exemplaire, bleu pour Modulable. Les bâtiments et m² précisent le périmètre.' },
   { target: 'roadmap', title: 'Consultez la feuille de route', body: 'La liste classe les bâtiments par échéance et critères ; elle s’exporte en CSV.' },
 ];

@@ -34,7 +34,7 @@ function drawIcon(shape: keyof typeof SHAPES, color: string) {
   return ctx.getImageData(0, 0, ICON_PX, ICON_PX);
 }
 
-function toCollection(assessments: Assessment[], mutedIds: Set<string>) {
+function toCollection(assessments: Assessment[]) {
   return {
     type: 'FeatureCollection' as const,
     features: assessments.map((item) => ({
@@ -47,7 +47,7 @@ function toCollection(assessments: Assessment[], mutedIds: Set<string>) {
         icon: iconKey(item.building.use, markerColor(item.cohort, criteriaOf(item))),
         size: Number(symbolScale(item.building.area).toFixed(2)),
         sre: item.building.area,
-        muted: mutedIds.has(item.building.id) ? 1 : 0,
+        opacity: COHORTS[item.cohort].opacity,
       },
     })),
   };
@@ -55,13 +55,12 @@ function toCollection(assessments: Assessment[], mutedIds: Set<string>) {
 
 interface Props {
   assessments: Assessment[];
-  mutedIds: Set<string>;
   selected: string | null;
   active: boolean;
   onSelect: (id: string) => void;
 }
 
-export default function BuildingMap({ assessments, mutedIds, selected, active, onSelect }: Props) {
+export default function BuildingMap({ assessments, selected, active, onSelect }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const onSelectRef = useRef(onSelect);
@@ -79,10 +78,7 @@ export default function BuildingMap({ assessments, mutedIds, selected, active, o
     map.on('error', () => setError(true));
     const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 14, className: 'building-popup' });
     map.on('load', () => {
-      for (const shape of SHAPE_NAMES) for (const color of ICON_COLORS) {
-        map.addImage(`${shape}|${color}`, drawIcon(shape, color), { pixelRatio: 2 });
-      }
-      map.addSource('buildings', { type: 'geojson', data: toCollection([], new Set()) });
+      map.addSource('buildings', { type: 'geojson', data: toCollection([]) });
       map.addLayer({
         id: 'selected-halo', type: 'circle', source: 'buildings', filter: ['==', ['get', 'id'], ''],
         paint: {
@@ -96,7 +92,7 @@ export default function BuildingMap({ assessments, mutedIds, selected, active, o
           'icon-image': ['get', 'icon'], 'icon-size': ['get', 'size'], 'icon-allow-overlap': true,
           'icon-ignore-placement': true, 'symbol-sort-key': ['-', 0, ['get', 'sre']],
         },
-        paint: { 'icon-opacity': ['case', ['==', ['get', 'muted'], 1], 0.3, 1] },
+        paint: { 'icon-opacity': ['get', 'opacity'] },
       });
       map.on('click', 'buildings', (event: MapLayerMouseEvent) => {
         const id = event.features?.[0]?.properties?.id;
@@ -123,8 +119,12 @@ export default function BuildingMap({ assessments, mutedIds, selected, active, o
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
-    (map.getSource('buildings') as GeoJSONSource).setData(toCollection(assessments, mutedIds));
-  }, [assessments, mutedIds, ready]);
+    for (const shape of SHAPE_NAMES) for (const color of ICON_COLORS) {
+      const key = `${shape}|${color}`;
+      if (!map.hasImage(key)) map.addImage(key, drawIcon(shape, color), { pixelRatio: 2 });
+    }
+    (map.getSource('buildings') as GeoJSONSource).setData(toCollection(assessments));
+  }, [assessments, ready]);
 
   useEffect(() => {
     const map = mapRef.current;

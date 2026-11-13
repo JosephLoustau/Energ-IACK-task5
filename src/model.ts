@@ -63,23 +63,23 @@ export interface Assessment {
 export const PRESETS: Record<'conservative' | 'ambitious', Strategy> = {
   conservative: {
     id: 'conservative',
-    name: 'Conservatoire',
+    name: 'Base légale',
     thresholds: { condition: 0.5, idc: 600, carbon: 20 },
     changes: [],
   },
   ambitious: {
     id: 'ambitious',
-    name: 'Accélération carbone',
+    name: 'Exemplaire',
     thresholds: { condition: 0.7, idc: 450, carbon: 6 },
     changes: [],
   },
 };
 
-export const COHORTS: Record<Cohort, { label: string; short: string; color: string }> = {
-  now: { label: 'À traiter maintenant', short: 'Immédiat', color: '#d64a48' },
-  five: { label: 'À traiter d’ici 5 ans', short: 'Sous 5 ans', color: '#e88738' },
-  ten: { label: 'À traiter entre 5 et 10 ans', short: 'Sous 10 ans', color: '#d4ad25' },
-  safe: { label: 'Aucun besoin identifié à 10 ans', short: 'À surveiller', color: '#329780' },
+export const COHORTS: Record<Cohort, { label: string; short: string; color: string; opacity: number }> = {
+  now: { label: 'À traiter maintenant', short: 'Immédiat', color: '#d64a48', opacity: 1 },
+  five: { label: 'À traiter d’ici 5 ans', short: 'Sous 5 ans', color: '#d4ad25', opacity: 1 },
+  ten: { label: 'À traiter entre 5 et 10 ans', short: 'Sous 10 ans', color: '#329780', opacity: 1 },
+  safe: { label: 'Aucun besoin identifié à 10 ans · surveillance au-delà', short: 'Au-delà de 10 ans', color: '#827f7c', opacity: 0.3 },
 };
 
 export const CRITERIA: Record<Criterion, string> = {

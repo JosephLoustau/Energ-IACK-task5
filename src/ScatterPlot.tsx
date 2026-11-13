@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { BUILDINGS } from './data';
-import { thresholdsAt } from './model';
+import { COHORTS, thresholdsAt } from './model';
 import type { Assessment, Strategy } from './model';
 import { SHAPES, criteriaOf, markerColor, shapeFor, symbolScale } from './symbols';
 
@@ -13,14 +13,13 @@ const ticks = (max: number, step: number) => Array.from({ length: Math.floor(max
 
 interface Props {
   assessments: Assessment[];
-  mutedIds: Set<string>;
   selected: string | null;
   strategy: Strategy;
   year: number;
   onSelect: (id: string) => void;
 }
 
-export default function ScatterPlot({ assessments, mutedIds, selected, strategy, year, onSelect }: Props) {
+export default function ScatterPlot({ assessments, selected, strategy, year, onSelect }: Props) {
   const [hover, setHover] = useState<Assessment | null>(null);
   const limits = thresholdsAt(strategy, year);
   const ordered = [...assessments].sort((a, b) => b.building.area - a.building.area);
@@ -43,7 +42,7 @@ export default function ScatterPlot({ assessments, mutedIds, selected, strategy,
         const r = 6 * symbolScale(building.area);
         const isSelected = selected === building.id;
         return <g key={building.id} transform={`translate(${sx(building.idc)} ${sy(building.carbonIntensity)}) scale(${r})`}
-          opacity={mutedIds.has(building.id) ? 0.28 : 0.92} className="scatter-point" tabIndex={0} role="button"
+          opacity={COHORTS[item.cohort].opacity} className="scatter-point" data-building-id={building.id} data-cohort={item.cohort} tabIndex={0} role="button"
           aria-label={`${building.name}, IDC ${building.idc}, CO₂ ${building.carbonIntensity}`}
           onMouseEnter={() => setHover(item)} onMouseLeave={() => setHover(null)} onFocus={() => setHover(item)} onBlur={() => setHover(null)}
           onClick={() => onSelect(building.id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') onSelect(building.id); }}>

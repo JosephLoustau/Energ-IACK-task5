@@ -1,0 +1,168 @@
+import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, expect, it, vi } from 'vitest';
+import App, { ThresholdControls } from './App';
+import Blason from './Blason';
+import ScatterPlot from './ScatterPlot';
+import { BUILDINGS } from './data';
+import { BASE_YEAR, COHORTS, PRESETS, assessPortfolio, selectProgram } from './model';
+import { ICON_COLORS, SHADES, criteriaOf, markerColor } from './symbols';
+
+vi.mock('./BuildingMap', () => ({
+  default: ({ assessments }: { assessments: { building: { id: string }; cohort: string }[] }) =>
+    <div data-testid="map-points">{assessments.map((item) =>
+      <span key={item.building.id} data-building-id={item.building.id} data-cohort={item.cohort} />)}</div>,
+}));
+
+describe('Présentation des scénarios', () => {
+  it('utilise les trois noms demandés dans le tableau de bord', () => {
+    const html = renderToStaticMarkup(<App />);
+    expect(PRESETS.conservative.name).toBe('Base légale');
+    expect(PRESETS.ambitious.name).toBe('Exemplaire');
+    expect(html).toContain('Base légale');
+    expect(html).toContain('Exemplaire');
+    expect(html).toContain('Modulable');
+    expect(html).toContain('StratoRéno');
+    expect(html).not.toContain('énergi<span class="brand-emphasis">ACK');
+    expect(html).not.toContain('Accélération décarbonation');
+    expect(html).not.toContain('Conservatoire');
+    expect(html).not.toContain('À votre mesure');
+  });
+
+  it('affiche les six repères avec leurs valeurs et leur position sur chaque plage', () => {
+    const html = renderToStaticMarkup(<ThresholdControls value={PRESETS.conservative.thresholds} editable onChange={vi.fn()} />);
+    const references = [
+      ['idc-conservative', 'Scénario 1, Base légale : 600 MJ/m²/an', 50],
+      ['idc-ambitious', 'Scénario 2, Exemplaire : 450 MJ/m²/an', 31.25],
+      ['condition-conservative', 'Scénario 1, Base légale : 0,50 / 1', 50],
+      ['condition-ambitious', 'Scénario 2, Exemplaire : 0,70 / 1', 70],
+      ['carbon-conservative', 'Scénario 1, Base légale : 20 kgCO₂e/m²/an', 19 / 79 * 100],
+      ['carbon-ambitious', 'Scénario 2, Exemplaire : 6 kgCO₂e/m²/an', 5 / 79 * 100],
+    ] as const;
+    for (const [id, label, position] of references) {
+      expect(html).toContain(`aria-label="${label}"`);
+      expect(html).toContain(`data-testid="reference-${id}" style="left:${position}%"`);
+    }
+    expect((html.match(/class="reference-key conservative"/g) ?? []).length).toBe(3);
+    expect((html.match(/class="reference-key ambitious"/g) ?? []).length).toBe(3);
+  });
+
+  it('garde les repères des bases fixes lorsque les seuils modulables sont différents', () => {
+    const html = renderToStaticMarkup(<ThresholdControls value={{ idc: 800, condition: 0.9, carbon: 35 }} editable onChange={vi.fn()} />);
+    expect(html).toContain('value="800"');
+    expect(html).toContain('Base légale : 600 MJ/m²/an');
+    expect(html).toContain('Exemplaire : 450 MJ/m²/an');
+    expect(html).not.toContain('disabled=""');
+  });
+
+  it('conserve les trois curseurs prédéfinis en lecture seule', () => {
+    const html = renderToStaticMarkup(<ThresholdControls value={PRESETS.conservative.thresholds} editable={false} onChange={vi.fn()} />);
+    expect((html.match(/disabled=""/g) ?? []).length).toBe(3);
+    expect(html).not.toContain('class="range-references"');
+    expect(html).not.toContain('class="reference-values"');
+  });
+});
+
+describe('Indicateurs de périmètre et identité', () => {
+  it('affiche le nombre exact de bâtiments et leur surface dans les valeurs mises en avant', () => {
+    const program = selectProgram(assessPortfolio(BUILDINGS, PRESETS.conservative), 0, null);
+    const format = (value: number) => new Intl.NumberFormat('fr-CH', { maximumFractionDigits: 0 }).format(value);
+    const html = renderToStaticMarkup(<App />);
+    const displayedCount = html.match(/data-testid="program-count">([^<]+)<\/strong>/)?.[1];
+    const displayedArea = html.match(/data-testid="program-area">([^<]+)<\/strong>/)?.[1];
+    expect(displayedCount).toBe(renderToStaticMarkup(<>{format(program.length)}</>));
+    expect(displayedArea).toBe(renderToStaticMarkup(<>{format(program.reduce((sum, item) => sum + item.building.area, 0))}</>));
+    expect(html).toContain('bâtiments à rénover');
+    expect(html).toContain('concernés');
+  });
+
+  it('utilise le fichier du logo officiel sans redessiner le blason', () => {
+    const html = renderToStaticMarkup(<Blason />);
+    expect(html).toContain('src="/ville-geneve.svg"');
+    expect(html).toContain('width="110"');
+    expect(html).toContain('alt="Ville de Genève — logo officiel"');
+    expect(html).not.toContain('<svg');
+  });
+});
+
+describe('Couleurs des échéances', () => {
+  it('propose la réinitialisation et explique comment isoler les bâtiments à dix ans', () => {
+    const html = renderToStaticMarkup(<App />);
+    expect(html).toContain('Réinitialiser les filtres');
+    expect(html).toContain('Effacer l’échéance, les affectations et la recherche');
+    expect(html).toContain('Rouge, jaune et vert : pleine opacité.');
+    expect(html).toContain('Au-delà de 10 ans : gris à 30 %.');
+    expect(html).toContain('« Sous 10 ans » couvre les besoins entre 5 et 10 ans.');
+  });
+
+  it('transmet tous les bâtiments à la carte par défaut, dont les bâtiments verts à dix ans', () => {
+    const portfolio = assessPortfolio(BUILDINGS, PRESETS.conservative);
+    const html = renderToStaticMarkup(<App />);
+    expect((html.match(/data-building-id="/g) ?? []).length).toBe(BUILDINGS.length);
+    expect((html.match(/data-building-id="[^"]+" data-cohort="ten"/g) ?? []).length)
+      .toBe(portfolio.filter((item) => item.cohort === 'ten').length);
+  });
+
+  it('conserve tous les points et leurs positions, avec 30 % seulement pour le gris, lorsque les seuils changent', () => {
+    const strategies = [
+      PRESETS.conservative,
+      PRESETS.ambitious,
+      { ...PRESETS.conservative, thresholds: { idc: 1000, condition: 0, carbon: 80 } },
+      { ...PRESETS.conservative, thresholds: { idc: 200, condition: 1, carbon: 1 } },
+    ];
+    let initialPositions: string[] | undefined;
+    for (const strategy of strategies) {
+      const assessments = assessPortfolio(BUILDINGS, strategy);
+      const html = renderToStaticMarkup(<ScatterPlot assessments={assessments} selected={null}
+        strategy={strategy} year={BASE_YEAR} onSelect={vi.fn()} />);
+      const points = [...html.matchAll(/<g transform="([^"]+)" opacity="([^"]+)" class="scatter-point" data-building-id="([^"]+)" data-cohort="([^"]+)"/g)];
+      const positions = points.map((match) => `${match[3]}:${match[1]}`).sort();
+      expect(positions.length).toBe(BUILDINGS.length);
+      for (const point of points) {
+        expect(Number(point[2])).toBe(point[4] === 'safe' ? 0.3 : 1);
+      }
+      if (initialPositions) expect(positions).toEqual(initialPositions);
+      else initialPositions = positions;
+      for (const item of assessments.filter((entry) => entry.cohort === 'ten')) {
+        expect(html).toContain(`fill="${markerColor(item.cohort, criteriaOf(item))}"`);
+      }
+    }
+  });
+
+  it.each(['conservative', 'ambitious'] as const)('conserve des bâtiments à dix ans dans le parc réel (%s)', (id) => {
+    const portfolio = assessPortfolio(BUILDINGS, PRESETS[id]);
+    const ten = selectProgram(portfolio, 0, 'ten');
+    expect(ten.length).toBeGreaterThan(0);
+    expect(ten.every((item) => item.dueYear !== null && item.dueYear > 2031 && item.dueYear <= 2036)).toBe(true);
+    expect(markerColor('ten', 1)).toBe(SHADES.ten[0]);
+    expect(new Set(ten.map((item) => item.building.id)).size).toBe(ten.length);
+  });
+
+  it.each([
+    ['now', '#d64a48'],
+    ['five', '#d4ad25'],
+    ['ten', '#329780'],
+    ['safe', '#827f7c'],
+  ] as const)('garde la famille de couleur %s cohérente entre le modèle et les symboles', (cohort, color) => {
+    expect(COHORTS[cohort].color).toBe(color);
+    expect(SHADES[cohort][1]).toBe(color);
+    expect(markerColor(cohort, 2)).toBe(color);
+    for (const shade of SHADES[cohort]) expect(ICON_COLORS).toContain(shade);
+  });
+
+  it('utilise le gris à 30 % pour la surveillance et conserve les trois autres échéances à 100 %', () => {
+    expect(markerColor('safe', 0)).toBe('#827f7c');
+    expect(COHORTS.safe.opacity).toBe(0.3);
+    for (const cohort of ['now', 'five', 'ten'] as const) expect(COHORTS[cohort].opacity).toBe(1);
+    expect(SHADES.safe.every((color) => color === COHORTS.safe.color)).toBe(true);
+    expect(SHADES.five).not.toEqual(SHADES.ten);
+  });
+
+  it('utilise des symboles bleus pour les affectations et les tailles de la légende', () => {
+    const html = renderToStaticMarkup(<App />);
+    const sizes = html.match(/<div class="size-legend">([\s\S]*?)<\/div>/)?.[1];
+    expect(sizes?.match(/fill="#347bc1"/g)?.length).toBe(4);
+    expect(html).toContain('class="use-filter "');
+    expect(html).toContain('data-cohort="safe"');
+    expect(html).toContain('Au-delà de 10 ans');
+  });
+});
