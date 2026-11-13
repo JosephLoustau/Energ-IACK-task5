@@ -6,6 +6,8 @@ import {
   ChartScatter, Map as MapIcon, PlayCircle, ShieldCheck, SlidersHorizontal, Sparkles, Trash2, TrendingUp, Wallet, X,
 } from 'lucide-react';
 import Blason from './Blason';
+import BuildingCharts from './BuildingCharts';
+import { DISCOUNT_RATE, ELECTRICITY_EMISSION, HEAT_PUMP_COP, PV, REALIZED_SHARE, RENT, SOCIAL_CARBON_COST } from './renovation';
 import BuildingMap from './BuildingMap';
 import ScatterPlot from './ScatterPlot';
 import Tour from './Tour';
@@ -13,7 +15,7 @@ import { HtmlReport } from './report/HtmlReport';
 import { SHADES, SHAPES, shapeFor, symbolScale } from './symbols';
 import { BUILDINGS, BUILDING_USES } from './data';
 import {
-  BASE_YEAR, COHORTS, CRITERIA, PRESETS, RENOVATION, assessPortfolio,
+  BASE_YEAR, COHORTS, CRITERIA, PRESETS, assessPortfolio,
   programMetrics, renovationFor, selectProgram,
 } from './model';
 import type { Assessment, Cohort, Strategy, StrategyId, Thresholds } from './model';
@@ -32,7 +34,7 @@ function ThresholdControls({ value, editable, onChange }: {
 }) {
   const fields = [
     { key: 'idc', title: 'Dépense de chaleur', unit: 'MJ/m²/an', min: 200, max: 1000, step: 10, sign: '>', description: 'IDC · priorité 1', icon: Flame },
-    { key: 'condition', title: 'État du bâtiment', unit: '/ 1', min: 0, max: 1, step: 0.05, sign: '<', description: 'Vétusté (proxy Stratus) · priorité 2', icon: Building2 },
+    { key: 'condition', title: 'État du bâtiment', unit: '/ 1', min: 0, max: 1, step: 0.05, sign: '<', description: 'Vétusté (âge depuis travaux) · priorité 2', icon: Building2 },
     { key: 'carbon', title: 'Intensité carbone', unit: 'kgCO₂e/m²/an', min: 1, max: 80, step: 1, sign: '>', description: 'Émissions d’exploitation · priorité 3', icon: Leaf },
   ] as const;
   return <div className="threshold-controls">
@@ -112,12 +114,12 @@ function BuildingDetail({ assessment, onClose }: { assessment: Assessment; onClo
       <div><span>CO₂ <small>kg/m²/an</small></span><strong>{number(building.carbonIntensity, 1)}{renovation && <><ArrowRight size={13} />{number(renovation.carbonAfter, 1)}</>}</strong></div>
       <div><span>Indice d’état</span><strong>{number(renovation?.conditionBefore ?? building.condition, 2)}{renovation && <><ArrowRight size={13} />{number(renovation.conditionAfter, 2)}</>}</strong></div>
     </div>
-    {renovation && <><div className="detail-investment"><span>Enveloppe estimée<strong>{money(renovation.cost)} CHF</strong></span><span>CO₂ évitable chaque année<strong>{number(renovation.carbonSaved, 1)} tCO₂e</strong></span></div>
-      <p className="detail-note">Enveloppe rénovée + chauffage décarboné générique. Faisabilité PAC/CAD non étudiée ; gains d’exploitation hors carbone des travaux.</p>
+    {renovation && <><div className="detail-investment"><span>Investissement estimé<strong>{money(renovation.cost)} CHF</strong></span><span>CO₂ évitable chaque année<strong>{number(renovation.carbonSaved, 1)} tCO₂e</strong></span></div>
+      <p className="detail-note">Paquet de mesures : isolation (façade, toit, cave), fenêtres et PAC air/eau si chauffage fossile — détail des coûts sous le graphique. Faisabilité non étudiée ; hors subventions.</p>
       {(renovation.idcAfter > dueThresholds.idc || renovation.carbonAfter > dueThresholds.carbon || renovation.conditionAfter < dueThresholds.condition)
         && <p className="residual-warning">L’intervention générique ne satisfait pas tous les seuils de cette stratégie. Une étude complémentaire est nécessaire.</p>}
     </>}
-    <small className="fiction-note">Sources : SITG, QuantHome. Indice d’état = proxy (âge, travaux énergétiques récents), pas un diagnostic Stratus.{building.imputed && building.imputed.length > 0 && ` Valeurs estimées par défaut faute de donnée : ${building.imputed.map((key) => ({ idc: 'IDC', carbon: 'CO₂', year: 'année de construction' } as Record<string, string>)[key] ?? key).join(', ')}.`}{building.protection && building.protection !== 'none' && ' Bâtiment protégé : contraintes de rénovation de l’enveloppe probables.'}</small>
+    <small className="fiction-note">Sources : SITG, QuantHome. Indice d’état modélisé (âge depuis construction ou derniers travaux), pas un diagnostic Stratus.{building.imputed && building.imputed.length > 0 && ` Valeurs estimées par défaut faute de donnée : ${building.imputed.map((key) => ({ idc: 'IDC', carbon: 'CO₂', year: 'année de construction' } as Record<string, string>)[key] ?? key).join(', ')}.`}{building.protection && building.protection !== 'none' && ' Bâtiment protégé : contraintes de rénovation de l’enveloppe probables.'}</small>
   </section>;
 }
 
@@ -216,12 +218,15 @@ export default function App() {
     {showAssumptions && <div className="drawer-backdrop" onClick={() => setShowAssumptions(false)}>
       <section className="assumptions-panel" role="dialog" aria-label="Méthode et hypothèses" onClick={(event) => event.stopPropagation()}>
         <div className="panel-heading"><h2>Méthode & hypothèses</h2><button className="icon-button" autoFocus aria-label="Fermer les hypothèses" onClick={() => setShowAssumptions(false)}><X size={18} /></button></div>
-        <p className="data-note"><ShieldCheck size={15} /> <span><strong>Données réelles, projections simulées.</strong> Parc SITG / QuantHome ; IDC et CO₂ parfois estimés, indice d’état déduit (proxy). Coûts et seuils non validés réglementairement. Année de référence {BASE_YEAR}.</span></p>
+        <p className="data-note"><ShieldCheck size={15} /> <span><strong>Données réelles, projections simulées.</strong> Parc SITG / QuantHome ; IDC et CO₂ parfois estimés, indice d’état modélisé. Coûts et seuils non validés réglementairement. Année de référence {BASE_YEAR}.</span></p>
         <div className="assumptions-grid">
           <div><h3>Déclenchement et priorité</h3><p>Un seul critère hors seuil suffit. Premier franchissement calculé chaque année de {BASE_YEAR} à {BASE_YEAR + 10}. Tri par année, puis critères déclenchés : IDC → état → CO₂, puis gain carbone annuel décroissant.</p></div>
-          <div><h3>Projection sans travaux</h3><p>État(t) = max(0, état initial − dégradation annuelle × années). IDC et CO₂ constants. Un changement de seuil s’applique dès son année et reste actif jusqu’au suivant. Aucun calendrier légal chargé.</p></div>
-          <div><h3>Intervention générique</h3><p>Chaleur −{percent(RENOVATION.heatReduction)} ; état relevé à au moins {number(RENOVATION.targetCondition, 2)}. Carbone après = minimum du carbone actuel et IDC après ÷ 3,6 × {number(RENOVATION.lowCarbonFactor, 3)} kgCO₂e/kWh.</p></div>
-          <div><h3>Coûts et agrégation</h3><p>Coût = surface × [{RENOVATION.fixedCostPerM2} + {RENOVATION.conditionCostPerM2} × (1 − état à l’échéance)] CHF/m². Moyennes pondérées par la surface, même périmètre avant/après. Hors inflation, subventions, frais d’exploitation et carbone des travaux.</p></div>
+          <div><h3>Projection sans travaux</h3><p>État = 1 si construction ou derniers travaux ont moins de 10 ans, puis −0,01 par an (0,40 à 70 ans), puis −0,005 par an. IDC et CO₂ constants. Un changement de seuil s’applique dès son année et reste actif jusqu’au suivant. Aucun calendrier légal chargé.</p></div>
+          <div><h3>Paquet de rénovation</h3><p>Enveloppe thermique : isolation façade, toiture et cave, fenêtres. Équipements techniques : PAC air/eau (COP {number(HEAT_PUMP_COP, 1)}) si le chauffage est fossile, et photovoltaïque en toiture pour réduire les imports d’électricité (impossible sur un bâtiment protégé). Économies d’enveloppe par ΔU × degrés-jours genevois, réalisées à {percent(REALIZED_SHARE)} et plafonnées à 70 % du chauffage. État remis à 1. Sources : docs/renovation/.</p></div>
+          <div><h3>Coûts</h3><p>Investissement = quantité × coût unitaire par mesure (prix 2020), annualisé à {percent(DISCOUNT_RATE)} sur la durée de vie ; barres : enveloppe thermique en vert foncé, équipements en vert clair. Énergie : prix LICS 2020. <strong>Subventions non appliquées</strong> : la feuille de route est établie pour la Ville de Genève elle-même. Moyennes pondérées par la surface.</p></div>
+          <div><h3>Carbone et électricité</h3><p>Coût social du carbone : <strong>{SOCIAL_CARBON_COST} CHF/tCO₂e</strong>, appliqué aux émissions annuelles. Facteur d’émission de l’électricité du réseau : <strong>{number(ELECTRICITY_EMISSION, 3)} kgCO₂e/kWh</strong> (convention directe, HFM2015 Tab. 6) ; les émissions du gaz et du mazout viennent des données SITG/QuantHome (scope 1).</p></div>
+          <div><h3>Photovoltaïque</h3><p>{number(PV.costPerKwc)} CHF/kWc, productible {number(PV.yield)} kWh/kWc·an, {PV.lifetime} ans, entretien {number(PV.maintenance * 100)} ct/kWh (SWISSOLAR2024). Puissance limitée par la toiture ({number(PV.kwcPerM2, 1)} kWc/m² × part de toiture ensoleillée OCEN) et par la consommation électrique de chauffage. Non installable sur les bâtiments protégés (classés ou à l’inventaire).</p></div>
+          <div><h3>Loyers</h3><p>Manque à gagner : {RENT.lossYears} an de loyers résidentiels non perçus pendant les travaux, réparti sur {RENT.spreadYears} ans. Hausse de loyer liée au confort : +{percent(RENT.comfortUplift)} des loyers (hypothèse modèle, non sourcée). Composantes du graphique des coûts annuels : le manque à gagner est tracé sous l’axe, la hausse de loyer au-dessus.</p></div>
           <div><h3>Lecture de la carte</h3><p>Taille du symbole ∝ √SRE, forme = affectation, couleur = échéance (rouge : immédiat, jaune : sous 5 ans, gris : sous 10 ans, blanc : surveillance), teinte plus foncée = plus de critères dépassés.</p></div>
         </div>
         <p className="assumption-footer">Les KPI sont le potentiel annuel des travaux achevés, pas un cumul des émissions évitées. La faisabilité technique, le patrimoine protégé et les contraintes de réseau ne sont pas modélisés. La maquette ne démontre pas la sortie complète des fossiles.</p>
@@ -279,6 +284,8 @@ export default function App() {
               {selectedAssessment && <div className="detail-float"><BuildingDetail assessment={selectedAssessment} onClose={() => setSelected(null)} /></div>}
             </div>
           </section>
+
+          {selectedAssessment && <BuildingCharts building={selectedAssessment.building} />}
 
           <section className="building-list" data-tour="roadmap">
             <div className="list-heading"><div><h2>{cohort === 'safe' ? 'Bâtiments à surveiller' : 'Votre feuille de route'}</h2><p>{program.length} bâtiments · {cohort === 'safe' ? 'pas de rénovation simulée' : 'échéance, critères puis impact carbone'}</p></div></div>
