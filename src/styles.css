@@ -261,3 +261,6 @@ tbody tr:hover { background: #fffaf0; }
   .site-footer > span:last-child { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; } }
+.map-toggle-3d { bottom: 145px; }
+.map-toggle-3d[aria-pressed="true"] { background: var(--black); color: #fff; }
+.export-actions { display: flex; gap: 8px; flex-wrap: wrap; }

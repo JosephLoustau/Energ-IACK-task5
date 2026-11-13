@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createDemoBuildings } from './data';
 import {
-  BASE_YEAR, PRESETS, RENOVATION, assessBuilding, assessPortfolio, conditionAt,
+  BASE_YEAR, DEGRADATION, PRESETS, RENOVATION, assessBuilding, assessPortfolio, conditionAt, conditionAtAge,
+  effectiveAge, withConditionModel,
   programMetrics, renovationFor, selectProgram, thresholdsAt, triggeredCriteria, validateStrategy,
 } from './model';
 import type { Building, Strategy } from './model';
@@ -243,5 +244,34 @@ describe('Données de démonstration et validation', () => {
   it('refuse deux changements pour la même année', () => {
     const change = { year: BASE_YEAR + 4, thresholds: PRESETS.ambitious.thresholds };
     expect(() => validateStrategy({ ...PRESETS.conservative, changes: [change, change] })).toThrow('année distincte');
+  });
+});
+
+describe('modèle d’état en S', () => {
+  it('vaut 1 à l’âge 0, décroît et reste au-dessus du plancher', () => {
+    expect(conditionAtAge(0)).toBeCloseTo(1, 10);
+    const values = Array.from({ length: 121 }, (_, age) => conditionAtAge(age));
+    values.slice(1).forEach((v, i) => expect(v).toBeLessThan(values[i]!));
+    expect(values.at(-1)!).toBeGreaterThan(DEGRADATION.floor);
+  });
+
+  it('chute le plus vite autour de l’âge médian (forme en S)', () => {
+    const drop = (age: number) => conditionAtAge(age) - conditionAtAge(age + 1);
+    expect(drop(DEGRADATION.midAge)).toBeGreaterThan(drop(5));
+    expect(drop(DEGRADATION.midAge)).toBeGreaterThan(drop(110));
+  });
+
+  it('plafonne l’âge effectif et retire du vieillissement après travaux', () => {
+    expect(effectiveAge(1850, null)).toBe(DEGRADATION.maxEffectiveAge);
+    expect(effectiveAge(BASE_YEAR - 30, null)).toBe(30);
+    expect(effectiveAge(BASE_YEAR - 30, 2020)).toBe(30 - DEGRADATION.workRecovery);
+    expect(effectiveAge(BASE_YEAR - 5, 2024)).toBe(0);
+  });
+
+  it('projette l’état sur la courbe depuis l’âge effectif', () => {
+    const modelled = withConditionModel({ ...building, constructionYear: BASE_YEAR - 40, lastWorkYear: null });
+    expect(modelled.condition).toBeCloseTo(conditionAtAge(40), 10);
+    expect(conditionAt(modelled, BASE_YEAR + 10)).toBeCloseTo(conditionAtAge(50), 10);
+    expect(modelled.annualDecay).toBeCloseTo(conditionAtAge(40) - conditionAtAge(41), 10);
   });
 });

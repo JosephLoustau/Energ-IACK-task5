@@ -25,11 +25,33 @@ export type ShapeName = keyof typeof SHAPES;
 const USE_SHAPE: Record<string, ShapeName> = {
   'Logement': 'circle', 'Logement mixte': 'hexagon', 'Éducation': 'triangle',
   'Administration': 'square', 'Commerce & ateliers': 'diamond', 'Culture & loisirs': 'star',
-  'Sport': 'cross', 'Santé & social': 'pentagon',
+  'Sport': 'pentagon', 'Santé & social': 'cross',
   // Jeu de démonstration historique
   'École': 'triangle', 'Musée': 'star',
 };
 export const shapeFor = (use: string): ShapeName => USE_SHAPE[use] ?? 'circle';
+
+/** Contour polygonal d'une forme (repère [-1, 1], y vers le bas comme en SVG), dérivé de SHAPES.
+ *  Gère M/L/H/V/Z ; le cercle (arcs) est approché par un polygone régulier. */
+export function shapePolygon(shape: ShapeName, circleSides = 20): [number, number][] {
+  if (shape === 'circle') {
+    return Array.from({ length: circleSides }, (_, i) => {
+      const a = (2 * Math.PI * i) / circleSides;
+      return [Math.cos(a), Math.sin(a)] as [number, number];
+    });
+  }
+  const points: [number, number][] = [];
+  let x = 0, y = 0;
+  for (const [, cmd, args] of SHAPES[shape].matchAll(/([MLHVZ])([^MLHVZ]*)/gi)) {
+    const n = (args!.match(/-?\d*\.?\d+/g) ?? []).map(Number);
+    switch (cmd!.toUpperCase()) {
+      case 'M': case 'L': [x, y] = [n[0]!, n[1]!]; points.push([x, y]); break;
+      case 'H': x = n[0]!; points.push([x, y]); break;
+      case 'V': y = n[0]!; points.push([x, y]); break;
+    }
+  }
+  return points;
+}
 
 /** Teintes selon l'échéance et le nombre de critères dépassés (IDC, CO₂, vétusté). */
 export const SHADES: Record<Cohort, [string, string, string]> = {
