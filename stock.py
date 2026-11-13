@@ -601,15 +601,30 @@ class CityStock:
         Path(path).write_text(json.dumps({"type": "FeatureCollection", "features": feats}, separators=(",", ":")))
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Build the stock and write the app's data files. Run before the web app starts (npm predev/prebuild)."""
+    import argparse
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--out", default="public/data", help="output directory served by the web app")
+    ap.add_argument("--refresh", action="store_true", help="refetch all providers instead of using data/cache")
+    ap.add_argument("--quiet", action="store_true")
+    args = ap.parse_args()
     stock = CityStock(with_3d=True)
-    stock.build()
-    print(stock.log)
-    for cat in Category:
-        print(f"## {cat}")
-        for name, spec in ATTRIBUTES.items():
-            if spec.category == cat:
-                print(f"  {name:24s} [{spec.unit or '-':12s}] {stock.coverage()[name]}")
-    stock.to_geojson("data/ville_geneve_core.geojson")
-    stock.to_geojson_3d("data/ville_geneve_3d.geojson")
-    print("detailed models:", stock.to_models3d("data/models3d"))
+    stock.build(refresh=args.refresh)
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    stock.to_geojson(str(out / "ville_geneve_core.geojson"))
+    stock.to_geojson_3d(str(out / "ville_geneve_3d.geojson"))
+    n = stock.to_models3d(str(out / "models3d"))
+    print(f"[data] {len(stock.buildings)} buildings, {n} 3D models -> {out}/")
+    if not args.quiet:
+        print(stock.log)
+        for cat in Category:
+            print(f"## {cat}")
+            for name, spec in ATTRIBUTES.items():
+                if spec.category == cat:
+                    print(f"  {name:24s} [{spec.unit or '-':12s}] {stock.coverage()[name]}")
+
+
+if __name__ == "__main__":
+    main()

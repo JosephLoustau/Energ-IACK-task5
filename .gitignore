@@ -1,4 +1,9 @@
 # Byte-compiled / optimized / DLL files
+node_modules/
+.env.*
+!.env.example
+playwright-report/
+test-results/
 __pycache__/
 *.py[codz]
 *$py.class
@@ -222,3 +227,4 @@ __marimo__/
 # local only
 context.md
 data/
+public/data/
