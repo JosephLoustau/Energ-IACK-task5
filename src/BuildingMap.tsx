@@ -13,6 +13,17 @@ maplibregl.setWorkerUrl(workerUrl);
 
 export const BASEMAP_STYLE = 'https://vectortiles.geo.admin.ch/styles/ch.swisstopo.lightbasemap.vt/style.json';
 
+// Fond allégé : sans voies ferrées ni tram ; autoroutes et routes principales en blanc comme les autres.
+const RAIL_LAYERS = ['public_transport', 'tunnel_public_transport', 'l1_public_transport', 'l2_public_transport_aerialway', 'road_number'];
+const ROAD_FILL = ['road_fill', 'l1_fill', 'l2_fill'];
+const ROAD_CASING = ['road_casing', 'l1_road_casing', 'l2_road_casing'];
+
+function simplifyBasemap(map: maplibregl.Map) {
+  for (const id of RAIL_LAYERS) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none');
+  for (const id of ROAD_FILL) if (map.getLayer(id)) map.setPaintProperty(id, 'line-color', '#fff');
+  for (const id of ROAD_CASING) if (map.getLayer(id)) map.setPaintProperty(id, 'line-color', 'rgb(90, 90, 90)');
+}
+
 const lngs = BUILDINGS.map((b) => b.coordinates[1]);
 const lats = BUILDINGS.map((b) => b.coordinates[0]);
 const BOUNDS: LngLatBoundsLike = [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]];
@@ -230,6 +241,7 @@ export default function BuildingMap({ assessments, mutedIds, selected, active, o
     map.on('error', () => setError(true));
     const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 14, className: 'building-popup' });
     map.on('load', () => {
+      simplifyBasemap(map);
       for (const shape of SHAPE_NAMES) for (const color of ICON_COLORS) {
         map.addImage(`${shape}|${color}`, drawIcon(shape, color), { pixelRatio: 2 });
       }
