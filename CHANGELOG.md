@@ -5,6 +5,9 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/).
 ## [Non publié]
 
 ### Ajouté
+- Onglet « Mesures de rénovation » à côté de Carte et Diagramme (`src/RenovationTab.tsx`, remplace le panneau « Avant / après rénovation ») : liste de mesures à cocher avec coût estimé, graphique des coûts annuels à droite qui s'adapte à la sélection (PAC requise pour le photovoltaïque ; loyers appliqués seulement si une mesure d'enveloppe est retenue). Les graphiques IDC et intensité carbone sont supprimés.
+- Feuille de route : pictogramme carte (voir sur la carte) et pictogramme clé (mesures de rénovation) en fin de ligne, à la place de la flèche.
+- Fiche bâtiment : IDC et CO₂ en barres horizontales (actuel, rénové, repère du seuil) à la place des chiffres.
 - Carte : synchronisation des symboles avant la mise à jour des points pour éviter une couleur manquante après une modification à chaud.
 - Bouton « Réinitialiser les filtres » dans la légende : efface échéance, affectations et recherche sans modifier le scénario ni l'horizon ; aide sur la catégorie cinq à dix ans.
 - Carte et diagramme : suppression de l'atténuation hors programme ; rouge, jaune et vert restent à pleine opacité même lorsque les seuils changent. Seuls les bâtiments au-delà de dix ans sont gris à 30 % d'opacité.
@@ -25,6 +28,8 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/).
 - Fiche bâtiment : protection patrimoniale, statut IDC (OCEN), sources et valeurs estimées.
 
 ### Modifié
+- Carte : l'avertissement « Fond de carte swisstopo partiellement indisponible » ne s'affiche plus quand seul le fichier des volumes 3D (`public/data/ville_geneve_3d.geojson`) manque ; un message distinct l'indique. Les erreurs de carte sont journalisées dans la console (`[carte]`).
+- Mention « PROTOTYPE NON OFFICIEL » retirée de l'en-tête ; « CO₂ évitable chaque année » devient « CO₂ évité chaque année » dans la fiche.
 - Application renommée « StratoRéno », y compris titre de page, en-tête, pied de page et préfixe des exports.
 - Scénarios renommés « Base légale », « Exemplaire » et « Modulable », y compris dans la visite et les exports.
 - Repères S1/S2 et valeurs de référence sur les trois plages du scénario modulable ; seuils séparés en blocs.

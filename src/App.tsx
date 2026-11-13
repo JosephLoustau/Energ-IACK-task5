@@ -3,10 +3,10 @@ import type { FormEvent } from 'react';
 import {
   ArrowRight, Building2, CalendarDays, Check, ChevronRight,
   CircleHelp, Download, FileText, Flame, Leaf, MapPin, Plus, RotateCcw, Search,
-  ChartScatter, Map as MapIcon, PlayCircle, ShieldCheck, SlidersHorizontal, Sparkles, Trash2, TrendingUp, Wallet, X,
+  ChartScatter, Map as MapIcon, Wrench, PlayCircle, ShieldCheck, SlidersHorizontal, Sparkles, Trash2, TrendingUp, Wallet, X,
 } from 'lucide-react';
 import Blason from './Blason';
-import BuildingCharts from './BuildingCharts';
+import RenovationTab from './RenovationTab';
 import { DISCOUNT_RATE, ELECTRICITY_EMISSION, HEAT_PUMP_COP, PV, REALIZED_SHARE, RENT, SOCIAL_CARBON_COST } from './renovation';
 import BuildingMap from './BuildingMap';
 import ScatterPlot from './ScatterPlot';
@@ -111,6 +111,23 @@ function FutureThresholds({ strategy, onChange }: { strategy: Strategy; onChange
   </div>;
 }
 
+/** Barre horizontale actuel / rénové avec repère du seuil ; les valeurs sont dans l'infobulle et le texte alternatif. */
+function HorizontalBar({ label, unit, before, after, limit, color }: {
+  label: string; unit: string; before: number; after: number | undefined; limit: number; color: string;
+}) {
+  const max = Math.max(before, after ?? 0, limit) * 1.1 || 1;
+  const pct = (value: number) => `${Math.min(100, value / max * 100)}%`;
+  const text = `${label} : ${number(before, before < 10 ? 1 : 0)} ${unit}${after !== undefined ? `, après rénovation ${number(after, after < 10 ? 1 : 0)}` : ''} ; seuil ${number(limit, limit < 10 ? 1 : 0)}`;
+  return <div className="hbar" role="img" aria-label={text} title={text}>
+    <span className="hbar-label">{label} <small>{unit}</small></span>
+    <div className="hbar-track">
+      <div className="hbar-fill" style={{ width: pct(before), background: color }} />
+      {after !== undefined && <div className="hbar-fill after" style={{ width: pct(after) }} />}
+      <div className="hbar-limit" style={{ left: pct(limit) }} />
+    </div>
+  </div>;
+}
+
 function BuildingDetail({ assessment, onClose }: { assessment: Assessment; onClose: () => void }) {
   const { building, dueYear, dueThresholds, dueCondition } = assessment;
   const renovation = dueYear === null ? null : renovationFor(building, dueYear);
@@ -127,12 +144,12 @@ function BuildingDetail({ assessment, onClose }: { assessment: Assessment; onClo
     </ul> : <p className="muted-text">Aucun seuil franchi jusqu’en {BASE_YEAR + 10}. Surveillance recommandée, sans travaux simulés.</p>}
     <h4>{renovation ? 'Rénovation simulée à l’échéance' : 'État actuel'}</h4>
     <div className="before-after">
-      <div><span>IDC <small>MJ/m²/an</small></span><strong>{building.idc}{renovation && <><ArrowRight size={13} />{number(renovation.idcAfter)}</>}</strong></div>
-      <div><span>CO₂ <small>kg/m²/an</small></span><strong>{number(building.carbonIntensity, 1)}{renovation && <><ArrowRight size={13} />{number(renovation.carbonAfter, 1)}</>}</strong></div>
+      <HorizontalBar label="IDC" unit="MJ/m²/an" before={building.idc} after={renovation?.idcAfter} limit={dueThresholds.idc} color={state.color} />
+      <HorizontalBar label="CO₂" unit="kg/m²/an" before={building.carbonIntensity} after={renovation?.carbonAfter} limit={dueThresholds.carbon} color={state.color} />
       <div><span>Indice d’état</span><strong>{number(renovation?.conditionBefore ?? building.condition, 2)}{renovation && <><ArrowRight size={13} />{number(renovation.conditionAfter, 2)}</>}</strong></div>
     </div>
-    {renovation && <><div className="detail-investment"><span>Investissement estimé<strong>{money(renovation.cost)} CHF</strong></span><span>CO₂ évitable chaque année<strong>{number(renovation.carbonSaved, 1)} tCO₂e</strong></span></div>
-      <p className="detail-note">Paquet de mesures : isolation (façade, toit, cave), fenêtres et PAC air/eau si chauffage fossile — détail des coûts sous le graphique. Faisabilité non étudiée ; hors subventions.</p>
+    {renovation && <><div className="detail-investment"><span>Investissement estimé<strong>{money(renovation.cost)} CHF</strong></span><span>CO₂ évité chaque année<strong>{number(renovation.carbonSaved, 1)} tCO₂e</strong></span></div>
+      <p className="detail-note">Paquet de mesures : isolation (façade, toit, cave), fenêtres et PAC air/eau si chauffage fossile — détail dans l’onglet « Mesures de rénovation ». Faisabilité non étudiée ; hors subventions.</p>
       {(renovation.idcAfter > dueThresholds.idc || renovation.carbonAfter > dueThresholds.carbon || renovation.conditionAfter < dueThresholds.condition)
         && <p className="residual-warning">L’intervention générique ne satisfait pas tous les seuils de cette stratégie. Une étude complémentaire est nécessaire.</p>}
     </>}
@@ -207,7 +224,7 @@ export default function App() {
   const [uses, setUses] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
-  const [tab, setTab] = useState<'map' | 'chart'>('map');
+  const [tab, setTab] = useState<'map' | 'chart' | 'measures'>('map');
   const [showAssumptions, setShowAssumptions] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
   const strategy = strategyId === 'custom' ? custom : PRESETS[strategyId];
@@ -253,7 +270,7 @@ export default function App() {
 
   return <div className="app-shell" data-strategy={strategyId}>
     <header className="topbar">
-      <a className="brand" href="#main" aria-label="StratoRéno — tableau de bord"><Blason /><span>Strato<span className="brand-emphasis">Réno</span><small>STRATÉGIE DE RÉNOVATION · PROTOTYPE NON OFFICIEL</small></span></a>
+      <a className="brand" href="#main" aria-label="StratoRéno — tableau de bord"><Blason /><span>Strato<span className="brand-emphasis">Réno</span><small>STRATÉGIE DE RÉNOVATION</small></span></a>
       <div className="topbar-right">
         <span className="topbar-count"><strong>{BUILDINGS.length}</strong> bâtiments de la Ville</span>
         <button className="help-button" onClick={() => setTourOpen(true)}><PlayCircle size={16} /> Visite guidée</button>
@@ -328,6 +345,7 @@ export default function App() {
               <div className="tabs" role="tablist">
                 <button role="tab" aria-selected={tab === 'map'} className={tab === 'map' ? 'active' : ''} onClick={() => setTab('map')}><MapIcon size={15} /> Carte</button>
                 <button role="tab" aria-selected={tab === 'chart'} className={tab === 'chart' ? 'active' : ''} data-tour="chart-tab" onClick={() => setTab('chart')}><ChartScatter size={15} /> Diagramme IDC × CO₂</button>
+                <button role="tab" aria-selected={tab === 'measures'} className={tab === 'measures' ? 'active' : ''} data-tour="measures-tab" onClick={() => setTab('measures')}><Wrench size={15} /> Mesures de rénovation</button>
               </div>
               <label className="search-box"><Search size={15} /><input type="search" aria-label="Rechercher un bâtiment ou quartier" placeholder="Adresse, quartier, EGID…" value={query} onChange={(event) => { setQuery(event.target.value); setSelected(null); }} /></label>
               <span className="map-count"><MapPin size={13} /> {visible.length} / {BUILDINGS.length}</span>
@@ -335,22 +353,26 @@ export default function App() {
             <div className="view-body">
               <div className={`view-pane ${tab === 'map' ? '' : 'hidden'}`}><BuildingMap assessments={visible} selected={selectedAssessment?.building.id ?? null} active={tab === 'map'} onSelect={setSelected} /></div>
               {tab === 'chart' && <div className="view-pane"><ScatterPlot assessments={visible} selected={selectedAssessment?.building.id ?? null} strategy={strategy} year={BASE_YEAR + horizon} onSelect={setSelected} /></div>}
-              <Legend counts={counts} cohort={cohort} onCohort={(value) => { setCohort(value); setSelected(null); }} useCounts={useCounts} uses={uses} onToggleUse={toggleUse} onClearUses={() => setUses(new Set())} onResetFilters={resetFilters} />
-              {selectedAssessment && <div className="detail-float"><BuildingDetail assessment={selectedAssessment} onClose={() => setSelected(null)} /></div>}
+              {tab === 'measures' && <div className="view-pane measures-pane">{selectedAssessment
+                ? <RenovationTab key={selectedAssessment.building.id} building={selectedAssessment.building} onShowOnMap={() => setTab('map')} />
+                : <div className="empty-state"><Wrench size={27} /><h3>Aucun bâtiment sélectionné</h3><p>Choisissez un bâtiment sur la carte, dans le diagramme ou dans la feuille de route (pictogramme <Wrench size={12} />) pour étudier ses mesures de rénovation.</p></div>}</div>}
+              {tab !== 'measures' && <Legend counts={counts} cohort={cohort} onCohort={(value) => { setCohort(value); setSelected(null); }} useCounts={useCounts} uses={uses} onToggleUse={toggleUse} onClearUses={() => setUses(new Set())} onResetFilters={resetFilters} />}
+              {tab !== 'measures' && selectedAssessment && <div className="detail-float"><BuildingDetail assessment={selectedAssessment} onClose={() => setSelected(null)} /></div>}
             </div>
           </section>
 
-          {selectedAssessment && <BuildingCharts building={selectedAssessment.building} />}
-
           <section className="building-list" data-tour="roadmap">
             <div className="list-heading"><div><h2>{cohort === 'safe' ? 'Bâtiments à surveiller' : 'Votre feuille de route'}</h2><p>{program.length} bâtiments · {cohort === 'safe' ? 'pas de rénovation simulée' : 'échéance, critères puis impact carbone'}</p></div><div className="export-actions"><button className="export-button" disabled={program.length === 0} onClick={() => exportProgram(program, strategy)}><Download size={15} /> Export CSV</button><button className="export-button" disabled={filtered.length === 0} onClick={exportReport}><FileText size={15} /> Rapport HTML</button></div></div>
-            <div className="table-scroll"><table><thead><tr><th>Bâtiment / quartier</th><th>Échéance</th><th>IDC<small>MJ/m²/an</small></th><th>État</th><th>CO₂<small>kg/m²/an</small></th><th>Motif principal</th><th aria-label="Ouvrir la fiche" /></tr></thead><tbody>
+            <div className="table-scroll"><table><thead><tr><th>Bâtiment / quartier</th><th>Échéance</th><th>IDC<small>MJ/m²/an</small></th><th>État</th><th>CO₂<small>kg/m²/an</small></th><th>Motif principal</th><th aria-label="Actions" /></tr></thead><tbody>
               {program.map((item) => <tr key={item.building.id} className={selected === item.building.id ? 'selected-row' : ''}>
                 <td><button className="building-name" onClick={() => { setSelected(item.building.id); if (tab === 'map') window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{item.building.name}<small>{item.building.district} · {item.building.use}</small></button></td>
                 <td><span className={`table-status ${item.cohort}`}><span />{item.dueYear ?? 'Suivi'}</span></td>
                 <td>{item.building.idc}</td><td>{number(item.building.condition, 2)}</td><td>{number(item.building.carbonIntensity, 1)}</td>
                 <td><span className="reason-tag">{item.triggers[0] ? CRITERIA[item.triggers[0]] : 'Aucun seuil franchi'}</span></td>
-                <td><button className="icon-button" aria-label={`Ouvrir ${item.building.name}`} onClick={() => setSelected(item.building.id)}><ChevronRight size={16} /></button></td>
+                <td className="row-actions">
+                  <button className="icon-button" aria-label={`Voir ${item.building.name} sur la carte`} title="Voir sur la carte" onClick={() => { setSelected(item.building.id); setTab('map'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}><MapPin size={16} /></button>
+                  <button className="icon-button" aria-label={`Mesures de rénovation de ${item.building.name}`} title="Mesures de rénovation" onClick={() => { setSelected(item.building.id); setTab('measures'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}><Wrench size={16} /></button>
+                </td>
               </tr>)}
             </tbody></table></div>
             {program.length === 0 && <div className="empty-state"><Building2 size={27} /><h3>Aucun bâtiment dans cette sélection</h3><p>Changez d’horizon, de catégorie ou de filtre pour explorer le parc.</p></div>}

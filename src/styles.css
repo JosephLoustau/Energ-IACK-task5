@@ -363,3 +363,40 @@ i.seg-carbon { background: repeating-linear-gradient(45deg, #bdbab0 0 3px, #8d8a
 .total-row td { border-top: 2px solid var(--black); font-weight: 600; }
 .measures-note { font-size: 10px; color: var(--muted); line-height: 1.6; padding: 10px 14px; }
 @media (max-width: 900px) { .charts-grid { grid-template-columns: 1fr; } }
+
+/* Onglet Mesures de rénovation */
+.measures-pane { overflow: auto; background: #faf8f1; }
+.renovation-tab { padding: 16px; }
+.renovation-body { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; margin-top: 12px; align-items: start; }
+.measures-panel, .costs-panel { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+.measures-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; }
+.measures-head span { font: 800 17px 'Manrope', sans-serif; color: var(--red); }
+.measures-actions { display: flex; gap: 14px; margin: 4px 0 8px; }
+.measure-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.measure-list li { border: 1px solid var(--border); border-radius: 7px; background: #fff; }
+.measure-list li.off { opacity: .55; background: #f1efe7; }
+.measure-list label { display: grid; grid-template-columns: auto 8px 1fr auto; gap: 10px; align-items: start; padding: 9px 10px; cursor: pointer; }
+.measure-list input { margin-top: 3px; accent-color: var(--black); width: 16px; height: 16px; }
+.measure-swatch { align-self: stretch; border-radius: 2px; border: 1px solid var(--black); }
+.measure-text { display: grid; gap: 3px; min-width: 0; }
+.measure-text strong { font-size: 12px; }
+.measure-text small { font-size: 10px; color: var(--muted); }
+.measure-text .measure-source { font-size: 9px; }
+.measure-note { color: var(--red-dark) !important; font-weight: 600; }
+.measure-cost { font: 700 13px 'Manrope', sans-serif; white-space: nowrap; }
+.measures-total { display: flex; justify-content: space-between; gap: 10px; margin-top: 10px; padding-top: 10px; border-top: 2px solid var(--black); font-size: 11px; align-items: baseline; }
+.measures-total strong { font: 800 15px 'Manrope', sans-serif; }
+.costs-panel .charts-legend { margin-bottom: 6px; }
+.row-actions { white-space: nowrap; text-align: right; }
+.hbar { display: grid; grid-template-columns: 74px 1fr; gap: 8px; align-items: center; padding: 8px; background: #faf8f1; }
+.hbar-label { font-size: 10px; color: var(--muted); }
+.hbar-label small { font-size: 8px; display: block; }
+.hbar-track { position: relative; height: 16px; background: #ebe8de; border-radius: 3px; border: 1px solid var(--black); overflow: hidden; }
+.hbar-fill { position: absolute; left: 0; top: 0; height: 100%; }
+.hbar-fill.after { top: 50%; height: 50%; background: #1e5b3a; border-top: 1px solid var(--black); }
+.hbar-limit { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--black); }
+@media (max-width: 900px) { .renovation-body { grid-template-columns: 1fr; } }
+.before-after > .hbar { display: grid; grid-template-columns: 74px 1fr; justify-content: stretch; }
+.hbar-track { min-width: 0; }
+.map-warning.blocks { bottom: 52px; }
+.map-warning code { background: #fff; padding: 0 4px; border-radius: 3px; }

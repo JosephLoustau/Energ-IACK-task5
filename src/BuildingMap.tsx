@@ -159,6 +159,7 @@ export default function BuildingMap({ assessments, selected, active, onSelect }:
   onSelectRef.current = onSelect;
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(false);
+  const [blocksError, setBlocksError] = useState(false);
   const [is3d, setIs3d] = useState(true); // 3D automatique selon le zoom ; false = toujours en plan
   const is3dRef = useRef(is3d);
   is3dRef.current = is3d;
@@ -170,7 +171,12 @@ export default function BuildingMap({ assessments, selected, active, onSelect }:
     });
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
-    map.on('error', () => setError(true));
+    map.on('error', (event) => {
+      const sourceId = (event as { sourceId?: string }).sourceId;
+      console.warn('[carte]', event.error?.message ?? event, sourceId ?? '');
+      // Les volumes 3D (public/data/ville_geneve_3d.geojson) sont indépendants du fond de carte swisstopo.
+      if (sourceId === 'city-blocks') setBlocksError(true); else setError(true);
+    });
     const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 14, className: 'building-popup' });
     map.on('load', () => {
       map.addSource('buildings', { type: 'geojson', data: toCollection([]) });
@@ -275,6 +281,7 @@ export default function BuildingMap({ assessments, selected, active, onSelect }:
     <div ref={container} className="building-map" aria-label="Carte des bâtiments de la Ville de Genève" />
     <button className="map-recenter" onClick={() => mapRef.current?.fitBounds(BOUNDS, { padding: 50, pitch: 0 })} title="Recentrer sur le parc" aria-label="Recentrer sur le parc"><LocateFixed size={18} /></button>
     <button className="map-recenter map-toggle-3d" onClick={() => setIs3d((v) => !v)} aria-pressed={is3d} title={is3d ? 'Rester en plan' : 'Volumes 3D en zoomant'} aria-label={is3d ? 'Rester en plan' : 'Volumes 3D en zoomant'}>{is3d ? <MapIcon size={18} /> : <Box size={18} />}</button>
+    {blocksError && <div className="map-warning blocks" role="status"><AlertTriangle size={15} /> Volumes 3D indisponibles : <code>public/data/ville_geneve_3d.geojson</code> est introuvable (lancer <code>npm run data</code>). La carte 2D reste utilisable.</div>}
     {error && <div className="map-warning" role="status"><AlertTriangle size={15} /> Fond de carte swisstopo partiellement indisponible. Les points restent utilisables.</div>}
     {assessments.length === 0 && <div className="map-empty">Aucun bâtiment ne correspond aux filtres.</div>}
   </div>;

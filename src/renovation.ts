@@ -97,6 +97,8 @@ export type MeasureCategory = 'enveloppe' | 'equipement';
 export interface Measure {
   id: string;
   category: MeasureCategory;
+  /** Mesure retenue dans le plan (cochée). */
+  included: boolean;
   label: string;
   quantity: number;
   unit: string;
@@ -108,6 +110,8 @@ export interface Measure {
   usefulSaving: number;
   source: string;
   proxy?: boolean;
+  /** Précision affichée lorsque la mesure ne s'applique pas dans la sélection courante. */
+  note?: string;
 }
 
 export interface Side {
@@ -159,24 +163,35 @@ function sideCosts(building: Building, input: SideInput): Side {
   };
 }
 
-export function planRenovation(building: Building): RenovationPlan {
+export const MEASURE_IDS = ['facade', 'toit', 'cave', 'fenetres', 'pac', 'pv'] as const;
+
+/**
+ * Plan de rénovation d'un bâtiment. `selection` = ensemble des mesures retenues (toutes par défaut) :
+ * `measures` liste toutes les mesures possibles avec leur drapeau `included`, et les coûts, économies,
+ * émissions et loyers ne tiennent compte que des mesures incluses.
+ */
+export function planRenovation(building: Building, selection?: ReadonlySet<string>): RenovationPlan {
+  const isOn = (id: string) => !selection || selection.has(id);
   const area = building.area;
   const finalBefore = building.idc / 3.6;
   const efficiency = EFFICIENCY[building.heating] ?? 0.85;
   const usefulBefore = finalBefore * efficiency;
   const protectedBuilding = !!building.protection && building.protection !== 'none';
+  const spaceHeating = Math.max(0, usefulBefore - HOT_WATER_KWH_M2);
 
   const measures: Measure[] = [];
-  let theoreticalSaving = 0; // kWh utile / m² SRE
+  let theoreticalSaving = 0;     // mesures incluses, kWh utile / m² SRE
+  let fullTheoreticalSaving = 0; // toutes les mesures (dimensionnement du photovoltaïque)
   for (const spec of ENVELOPE) {
     const interior = spec.id === 'facade' && protectedBuilding;
     const quantity = ELEMENT_RATIO[spec.id] * area;
     const unitCost = interior ? INTERIOR_INSULATION_COST : spec.unitCost;
     const saving = (spec.f0 * spec.u0 - spec.f1 * spec.u1) * CGHT * ELEMENT_RATIO[spec.id];
-    theoreticalSaving += saving;
+    fullTheoreticalSaving += saving;
+    if (isOn(spec.id)) theoreticalSaving += saving;
     const cost = quantity * unitCost;
     measures.push({
-      id: spec.id, category: 'enveloppe',
+      id: spec.id, category: 'enveloppe', included: isOn(spec.id),
       label: interior ? 'Isolation intérieure de la façade (bâtiment protégé)' : spec.label,
       quantity, unit: 'm²', unitCost, cost, lifetime: spec.lifetime, annualCost: cost * annuity(spec.lifetime),
       usefulSaving: saving * area,
@@ -184,18 +199,19 @@ export function planRenovation(building: Building): RenovationPlan {
       proxy: interior,
     });
   }
-  const spaceHeating = Math.max(0, usefulBefore - HOT_WATER_KWH_M2);
   const envelopeSaving = Math.min(MAX_ENVELOPE_SHARE * spaceHeating, REALIZED_SHARE * theoreticalSaving);
   const usefulAfter = usefulBefore - envelopeSaving;
+  const fullUsefulAfter = usefulBefore - Math.min(MAX_ENVELOPE_SHARE * spaceHeating, REALIZED_SHARE * fullTheoreticalSaving);
 
-  const heatPump = FOSSIL_OR_UNKNOWN.has(building.heating);
+  const heatPumpPossible = FOSSIL_OR_UNKNOWN.has(building.heating);
+  const heatPump = heatPumpPossible && isOn('pac');
   const powerKw = specificPower(finalBefore) * area / 1000;
-  if (heatPump) {
+  if (heatPumpPossible) {
     const cost = heatPumpCost(powerKw);
     measures.push({
-      id: 'pac', category: 'equipement', label: 'Pompe à chaleur air/eau (remplacement de la chaudière)', quantity: powerKw, unit: 'kW',
-      unitCost: cost / powerKw, cost, lifetime: HEAT_PUMP_LIFETIME, annualCost: cost * annuity(HEAT_PUMP_LIFETIME),
-      usefulSaving: 0,
+      id: 'pac', category: 'equipement', included: heatPump, label: 'Pompe à chaleur air/eau (remplacement de la chaudière)',
+      quantity: powerKw, unit: 'kW', unitCost: cost / powerKw, cost, lifetime: HEAT_PUMP_LIFETIME,
+      annualCost: cost * annuity(HEAT_PUMP_LIFETIME), usefulSaving: 0,
       source: 'LICS2022 Annexe 11.1 Fig. 47 (changement de système, interpolation) ; puissance : LICS2022 Tab. 9 ; durée : HFM2015 Tab. 10',
     });
   }
@@ -203,39 +219,46 @@ export function planRenovation(building: Building): RenovationPlan {
   const finalAfter = heatPump ? usefulAfter / HEAT_PUMP_COP : usefulAfter / efficiency;
   const heatingAfter = heatPump ? 'Pompe à chaleur' : building.heating;
   const electrified = heatPump || ELECTRIC_HEATING.has(building.heating);
+  const electrifiedFull = heatPumpPossible || ELECTRIC_HEATING.has(building.heating);
 
-  // Photovoltaïque : dimensionné pour couvrir au plus l'électricité de chauffage ; impossible sur un bâtiment protégé.
-  const electricAfter = electrified ? finalAfter * area : 0;
+  // Photovoltaïque : dimensionné sur le paquet complet (taille stable), limité par la toiture ; impossible sur un bâtiment protégé.
+  const electricFull = electrifiedFull ? (heatPumpPossible ? fullUsefulAfter / HEAT_PUMP_COP : fullUsefulAfter / efficiency) * area : 0;
   const roofShare = building.solarShare ?? PV.defaultRoofShare;
   const capacityKwc = ELEMENT_RATIO.toit * area * roofShare * PV.kwcPerM2;
-  let kwc = Math.min(capacityKwc, electricAfter / PV.yield);
+  let kwc = Math.min(capacityKwc, electricFull / PV.yield);
   let reason: string | null = null;
   if (protectedBuilding) { kwc = 0; reason = 'Bâtiment protégé (patrimoine) : panneaux photovoltaïques non installables.'; }
-  else if (!electrified) reason = 'Pas d’électrification du chauffage : pas de photovoltaïque simulé.';
+  else if (!electrifiedFull) reason = 'Pas d’électrification du chauffage : pas de photovoltaïque simulé.';
   else if (kwc < PV.minKwc) { kwc = 0; reason = 'Toiture trop petite pour une installation photovoltaïque.'; }
-  const pvKwh = kwc * PV.yield;
+  const pvOn = kwc > 0 && isOn('pv') && electrified;
   if (kwc > 0) {
     const cost = kwc * PV.costPerKwc;
     measures.push({
-      id: 'pv', category: 'equipement', label: 'Panneaux photovoltaïques en toiture', quantity: kwc, unit: 'kWc',
+      id: 'pv', category: 'equipement', included: pvOn, label: 'Panneaux photovoltaïques en toiture', quantity: kwc, unit: 'kWc',
       unitCost: PV.costPerKwc, cost, lifetime: PV.lifetime, annualCost: cost * annuity(PV.lifetime), usefulSaving: 0,
       source: 'SWISSOLAR2024 diapo 8 (2 400 CHF/kWc, prix 2023, hors rétribution) ; productible 1 050 kWh/kWc ; durée 25 ans',
+      note: !electrified ? 'Nécessite l’électrification du chauffage (pompe à chaleur).' : undefined,
     });
   }
+  const production = pvOn ? kwc * PV.yield : 0;
+  const pvKwh = Math.min(production, electrified ? finalAfter * area : 0);
 
   const carbonAfter = electrified
     ? Math.max(0, finalAfter - pvKwh / area) * ELECTRICITY_EMISSION
     : (finalBefore > 0 ? building.carbonIntensity * finalAfter / finalBefore : 0);
 
-  const capex = measures.reduce((sum, m) => sum + m.cost, 0);
-  const annual = (category: MeasureCategory) => measures.filter((m) => m.category === category).reduce((sum, m) => sum + m.annualCost, 0);
+  const included = measures.filter((m) => m.included);
+  const capex = included.reduce((sum, m) => sum + m.cost, 0);
+  const annual = (category: MeasureCategory) => included.filter((m) => m.category === category).reduce((sum, m) => sum + m.annualCost, 0);
 
+  // Les loyers ne sont touchés que si des travaux d'enveloppe sont réalisés dans les logements.
   const base = building.rentResidential ?? 0;
-  const loss = base * RENT.lossYears / RENT.spreadYears;
-  const gain = base * RENT.comfortUplift;
+  const worksInside = included.some((m) => m.category === 'enveloppe');
+  const loss = worksInside ? base * RENT.lossYears / RENT.spreadYears : 0;
+  const gain = worksInside ? base * RENT.comfortUplift : 0;
   return {
     measures, capex, heatPump, powerKw,
-    pv: { kwc, production: pvKwh, blocked: protectedBuilding, reason },
+    pv: { kwc: pvOn ? kwc : 0, production, blocked: protectedBuilding, reason },
     rent: { base, loss, gain, net: gain - loss },
     before: sideCosts(building, { finalKwhPerM2: finalBefore, carbon: building.carbonIntensity, heating: building.heating }),
     after: sideCosts(building, {
