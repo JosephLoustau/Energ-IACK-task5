@@ -16,6 +16,7 @@ from shapely.geometry.polygon import orient
 from shapely.strtree import STRtree
 
 from data_loader import QBuildingsClient, QuantHomeClient, SitgClient
+from geometry3d import Model3DBuilder, RoofSurface
 
 
 class Provenance(StrEnum):
@@ -42,6 +43,7 @@ class Category(StrEnum):
     ENERGY = "energy"
     VALUE = "value"
     CONSTRUCTION = "construction"
+    GEOMETRY_3D = "3d (optional)"
 
 
 @dataclass(frozen=True)
@@ -51,7 +53,7 @@ class AttributeSpec:
     category: Category
 
 
-B, E, V, C = Category.BASIC, Category.ENERGY, Category.VALUE, Category.CONSTRUCTION
+B, E, V, C, G = Category.BASIC, Category.ENERGY, Category.VALUE, Category.CONSTRUCTION, Category.GEOMETRY_3D
 ATTRIBUTES: dict[str, AttributeSpec] = {
     "owner": AttributeSpec("Owner", None, B),
     "address": AttributeSpec("Official address", None, B),
@@ -70,14 +72,27 @@ ATTRIBUTES: dict[str, AttributeSpec] = {
     "cad_in_street": AttributeSpec("District heating in street", None, E),
     "solar_profile": AttributeSpec("Roof irradiation profile", None, E),
     "solar_share_above_1000": AttributeSpec("Roof share > 1000 kWh/m²·yr", None, E),
+    "pv_area": AttributeSpec("PV potential, module area", "m2", E),
+    "pv_power": AttributeSpec("PV potential, peak power", "kWp", E),
+    "pv_yield": AttributeSpec("PV potential, yearly production", "kWh/y", E),
+    "pv_co2_avoided": AttributeSpec("PV potential, CO2 avoided", "kgCO2/y", E),
     "rent_residential": AttributeSpec("Residential net rent", "CHF/y", V),
     "rent_commercial": AttributeSpec("Commercial net rent", "CHF/y", V),
     "market_value": AttributeSpec("Market value", "CHF", V),
     "retrofit_cost_ratio": AttributeSpec("Retrofit cost / market value", None, V),
     "value_uplift": AttributeSpec("Value increase after renovation", None, V),
+    "pv_investment": AttributeSpec("PV investment", "CHF", V),
+    "pv_subsidy": AttributeSpec("PV subsidy", "CHF", V),
+    "pv_annual_gain": AttributeSpec("PV yearly gain", "CHF/y", V),
+    "pv_irr": AttributeSpec("PV internal rate of return", "%", V),
     "permits": AttributeSpec("Building permits", None, C),
     "last_energy_permit": AttributeSpec("Last energy-related permit", None, C),
+    "base_altitude": AttributeSpec("Ground altitude", "m", G),
+    "height": AttributeSpec("Height (ground to roof top)", "m", G),
+    "id_3d": AttributeSpec("swissBUILDINGS3D ids", None, G),
+    "model_3d": AttributeSpec("Detailed 3D model (footprint + roof planes)", None, G),
 }
+DETAIL_ONLY = {"model_3d"}   # exported per building (CityStock.to_models3d), not in the main GeoJSON
 
 
 @dataclass
@@ -164,6 +179,8 @@ class Building:
         """Flat dict per attribute: <name>, <name>_provenance, <name>_method, <name>_comment."""
         rec = {"egid": self.egid, "qh_id": self.qh_id, "parcel_egrid": self.parcel_egrid}
         for name in ATTRIBUTES:
+            if name in DETAIL_ONLY:
+                continue
             a = self.attrs.get(name)
             v = a.value if a else None
             if name == "permits":
@@ -210,8 +227,9 @@ class CityStock:
                  "official_energy_intensity", "estimated_energy_intensity"]
     QB_COLUMNS = ["energy_heating_signature_kWh_y", "energy_hotwater_signature_kWh_y", "area_era_m2"]
 
-    def __init__(self, owner: str = "Ville de Genève", cache_dir: str = "data/cache", permits_since: int = 2010):
-        self.owner, self.permits_since = owner, permits_since
+    def __init__(self, owner: str = "Ville de Genève", cache_dir: str = "data/cache", permits_since: int = 2010,
+                 with_3d: bool = False):
+        self.owner, self.permits_since, self.with_3d = owner, permits_since, with_3d
         self.cache = Path(cache_dir)
         self.cache.mkdir(parents=True, exist_ok=True)
         self.sitg = SitgClient()
@@ -239,6 +257,8 @@ class CityStock:
         self._enrich_permits(refresh)
         self._enrich_quanthome(refresh)
         self._enrich_qbuildings(refresh)
+        if self.with_3d:
+            self._enrich_3d(refresh)
         self._derive()
         return list(self.buildings.values())
 
@@ -336,6 +356,18 @@ class CityStock:
             b.fill("hot_water", pick("ECS"), D, src)
             b.set("cad_connected", any("CAD" in r["TYPE_INSTALLATION"] for r in rows), D, src,
                   "installation type = CAD heat exchanger")
+
+        pv = self._cached("pv", lambda: self.sitg.by_egid("OCEN_SOLAIRE_PV_BATIMENT", egids, geometry=False)["features"],
+                          refresh)
+        src, cm = "SITG OCEN_SOLAIRE_PV_BATIMENT", "cantonal PV model, economically sized installation"
+        for f in pv:
+            p = f["properties"]
+            if not (b := self.buildings.get(int(p["EGID"]))):
+                continue
+            for attr, k in (("pv_area", "M2_PV"), ("pv_power", "P_KWC"), ("pv_yield", "PV_AN_KWH"),
+                            ("pv_co2_avoided", "CO2"), ("pv_investment", "INVEST"), ("pv_subsidy", "SUB_AC"),
+                            ("pv_annual_gain", "GAINS_AN"), ("pv_irr", "TRI")):
+                b.fill(attr, round(p[k], 2) if isinstance(p[k], float) else p[k], E, src, f"{k}; {cm}")
 
         for layer, level in (("DPS_CLASSEMENT", "classé"), ("DPS_INVENTAIRE", "inventaire")):
             polys = self._cached(layer.lower(), lambda l=layer: self.sitg.query(l, out_fields="NOM")["features"], refresh)
@@ -451,6 +483,66 @@ class CityStock:
                        f"(heating + hot-water signature) / ERA of block of {r['n_egids']} EGID(s), kWh→MJ "
                        "(median −11% vs measured)")
 
+    def _enrich_3d(self, refresh):
+        """Light 3D: extrusion values (SITG 3D model) + swissBUILDINGS3D ids to show the building (QBuildings CH)."""
+        egids = list(self.buildings)
+        base = self._cached("bati3d_base", lambda: self.sitg.by_egid(
+            "CAD_BATI3D_BASE", egids, geometry=False, out_fields="EGID,ALTITUDE_REF")["features"], refresh)
+        roof = self._cached("bati3d_roof", lambda: self.sitg.by_egid(
+            "CAD_BATI3D_BASIC_TOIT", egids, geometry=False, out_fields="EGID,ALTITUDE_MAX")["features"], refresh)
+        ref = {int(f["properties"]["EGID"]): f["properties"]["ALTITUDE_REF"] for f in base}
+        top: dict[int, float] = {}
+        for f in roof:
+            e, z = int(f["properties"]["EGID"]), f["properties"]["ALTITUDE_MAX"]
+            top[e] = max(top.get(e, z), z)
+        D = Method.DECLARED
+        for egid, b in self.buildings.items():
+            if (z0 := ref.get(egid)) is not None:
+                b.set("base_altitude", round(z0, 2), D, "SITG CAD_BATI3D_BASE", "ALTITUDE_REF")
+                if (z1 := top.get(egid)) is not None:
+                    b.set("height", round(z1 - z0, 2), D, "SITG CAD_BATI3D_BASIC_TOIT",
+                          "ALTITUDE_MAX − ALTITUDE_REF of CAD_BATI3D_BASE")
+        # Height fallback: cadastral height > storeys × 2.8 m > one storey
+        cad = self._cached("heights_cad", lambda: self.sitg.by_egid(
+            "CAD_BATIMENT_HORSOL", egids, geometry=False, out_fields="EGID,HAUTEUR,NIVEAUX_HORSOL")["features"], refresh)
+        cad_by = {int(f["properties"]["EGID"]): f["properties"] for f in cad}
+        for egid, b in self.buildings.items():
+            p = cad_by.get(egid, {})
+            b.fill("height", p.get("HAUTEUR"), D, "SITG CAD_BATIMENT_HORSOL", "HAUTEUR (cadastral height)")
+            if p.get("NIVEAUX_HORSOL"):
+                b.fill("height", round(p["NIVEAUX_HORSOL"] * 2.8, 2), Method.ESTIMATED, "SITG CAD_BATIMENT_HORSOL",
+                       f"NIVEAUX_HORSOL ({p['NIVEAUX_HORSOL']}) × 2.8 m")
+            b.fill("height", 2.8, Method.ESTIMATED, "Computed", "default: one storey × 2.8 m")
+
+        ids = self._cached("ids_3d", lambda: {str(k): v for k, v in
+                                              QBuildingsClient(env="QBUILDINGS_CH").ids_3d(egids).items()}, refresh)
+        for egid, v in ids.items():
+            if b := self.buildings.get(int(egid)):
+                b.set("id_3d", v, D, "QBuildings Aggregated.roofs (Switzerland DB)",
+                      "ids common to all roof rows of the EGID; may include adjoining parts")
+
+        # Detailed model: footprint (LV95) + SITG roof surfaces → reho-fm model3d payload
+        foot = self._cached("footprints_lv95", lambda: self.sitg.by_egid(
+            "CAD_BATIMENT_HORSOL", egids, out_fields="EGID", out_sr=2056)["features"], refresh)
+        surf = self._cached("roof_surfaces_lv95", lambda: self.sitg.by_egid(
+            "OCEN_SOLAIRE_ID_SURFACE_BASE", egids, out_sr=2056,
+            out_fields="EGID,ORIENTATION_MOYENNE,PENTE_MOYENNE,IRR_MOYENNE,SURFACE_TOIT")["features"], refresh)
+        fp = {int(f["properties"]["EGID"]): shape(f["geometry"]) for f in foot if f["geometry"]}
+        roofs: dict[int, list[RoofSurface]] = {}
+        for f in surf:
+            p = f["properties"]
+            if f["geometry"] and p["PENTE_MOYENNE"] is not None and p["ORIENTATION_MOYENNE"] is not None:
+                roofs.setdefault(int(p["EGID"]), []).append(RoofSurface(
+                    shape(f["geometry"]), p["PENTE_MOYENNE"], p["ORIENTATION_MOYENNE"], p["IRR_MOYENNE"] or 0,
+                    p["SURFACE_TOIT"] or 0))
+        builder = Model3DBuilder()
+        for egid, b in self.buildings.items():
+            if egid in fp and (m := builder.build(fp[egid], roofs.get(egid, []), b.value("height"),
+                                                  b.value("base_altitude"))):
+                b.set("model_3d", m, Method.ESTIMATED, "SITG CAD_BATIMENT_HORSOL + OCEN_SOLAIRE_ID_SURFACE_BASE",
+                      f"{len(m['planes'])} roof planes; local metres, reho-fm model3d format; "
+                      "plane heights inferred from shared ridges")
+
     def _derive(self):
         """CO2 scope 1 fallback: IDC × direct emission factor of the main fuel."""
         for b in self.buildings.values():
@@ -487,8 +579,30 @@ class CityStock:
                                          ensure_ascii=False))
 
 
+    def to_models3d(self, directory: str) -> int:
+        """One small JSON per building ({egid}.json) for the detailed 3D view, loaded on demand."""
+        out = Path(directory)
+        out.mkdir(parents=True, exist_ok=True)
+        n = 0
+        for b in self.buildings.values():
+            if m := b.value("model_3d"):
+                (out / f"{b.egid}.json").write_text(json.dumps({"egid": b.egid, **m}, separators=(",", ":")))
+                n += 1
+        return n
+
+    def to_geojson_3d(self, path: str, precision: int = 6) -> None:
+        """Light layer for web 3D (e.g. MapLibre fill-extrusion / deck.gl): footprint + base altitude + height + ids."""
+        def rnd(c):
+            return [rnd(x) for x in c] if isinstance(c[0], list) else [round(x, precision) for x in c]
+        feats = [{"type": "Feature", "geometry": {"type": b.geometry["type"], "coordinates": rnd(b.geometry["coordinates"])},
+                  "properties": {"egid": b.egid, "base_altitude": b.value("base_altitude"), "height": b.value("height"),
+                                 "id_3d": b.value("id_3d")}}
+                 for b in self.buildings.values() if b.value("height") is not None]
+        Path(path).write_text(json.dumps({"type": "FeatureCollection", "features": feats}, separators=(",", ":")))
+
+
 if __name__ == "__main__":
-    stock = CityStock()
+    stock = CityStock(with_3d=True)
     stock.build()
     print(stock.log)
     for cat in Category:
@@ -497,3 +611,5 @@ if __name__ == "__main__":
             if spec.category == cat:
                 print(f"  {name:24s} [{spec.unit or '-':12s}] {stock.coverage()[name]}")
     stock.to_geojson("data/ville_geneve_core.geojson")
+    stock.to_geojson_3d("data/ville_geneve_3d.geojson")
+    print("detailed models:", stock.to_models3d("data/models3d"))
