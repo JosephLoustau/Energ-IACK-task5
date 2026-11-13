@@ -110,15 +110,17 @@ class SitgClient:
         return r.json()["count"]
 
     def query(self, layer: str, where: str = "1=1", out_fields: str = "*", geometry: bool = True,
-              page_size: int = 2000, max_rows: int | None = None, extra: dict | None = None) -> dict:
-        """GeoJSON FeatureCollection (WGS84). `extra`: e.g. a spatial filter.
+              page_size: int = 2000, max_rows: int | None = None, extra: dict | None = None,
+              out_sr: int = 4326) -> dict:
+        """GeoJSON FeatureCollection in `out_sr` (4326 = WGS84, 2056 = LV95 metres).
+        `extra`: filter parameters (e.g. a spatial filter), applied when selecting ids.
         Fetches matching OBJECTIDs first, then features by id batch (offset paging is unreliable on SITG)."""
         ids = sorted(self._post(layer, {"where": where, "returnIdsOnly": "true", "f": "json", **(extra or {})})
                      .get("objectIds") or [])[:max_rows]
         feats = []
         for i in range(0, len(ids), page_size):
             feats += self._post(layer, {"objectIds": ",".join(map(str, ids[i:i + page_size])), "outFields": out_fields,
-                                        "returnGeometry": str(geometry).lower(), "outSR": 4326, "f": "geojson"})["features"]
+                                        "returnGeometry": str(geometry).lower(), "outSR": out_sr, "f": "geojson"})["features"]
         return {"type": "FeatureCollection", "features": feats}
 
     def _post(self, layer: str, data: dict) -> dict:
@@ -152,15 +154,29 @@ class SitgClient:
 
 @dataclass
 class QBuildingsClient:
-    """EPFL QBuildings (Geneva) PostgreSQL. Rows are building blocks: `egid` lists several EGIDs joined by '/'."""
+    """EPFL QBuildings PostgreSQL. `env`: "QBUILDINGS" (Geneva DB) or "QBUILDINGS_CH" (Switzerland DB).
+    Geneva rows are building blocks: `egid` lists several EGIDs joined by '/'."""
     schema: str = "Processed"
+    env: str = "QBUILDINGS"
 
     def __post_init__(self):
         import psycopg
         load_dotenv()
-        e = os.environ
-        self.conn = psycopg.connect(host=e["QBUILDINGS_HOST"], port=e["QBUILDINGS_PORT"], dbname=e["QBUILDINGS_DB"],
-                                    user=e["QBUILDINGS_USER"], password=e["QBUILDINGS_PASSWORD"], connect_timeout=20)
+        e = {k: os.environ[f"{self.env}_{k}"] for k in ("HOST", "PORT", "DB", "USER", "PASSWORD")}
+        self.conn = psycopg.connect(host=e["HOST"], port=e["PORT"], dbname=e["DB"], user=e["USER"],
+                                    password=e["PASSWORD"], connect_timeout=20)
+
+    def ids_3d(self, egids: list[int]) -> dict[int, list[str]]:
+        """swissBUILDINGS3D ids per EGID (Switzerland DB, Aggregated.roofs). Roof rows carry block-level id lists;
+        the ids common to all roofs of an EGID are kept (falls back to the smallest list)."""
+        import re
+        with self.conn.cursor() as cur:
+            cur.execute('SELECT egid, "id_building3D" FROM "Aggregated".roofs WHERE egid = ANY(%s)', ([float(e) for e in egids],))
+            lists: dict[int, list[set]] = {}
+            for egid, raw in cur.fetchall():
+                if ids := set(re.findall(r"\{[0-9A-Fa-f-]{36}\}", raw or "")):
+                    lists.setdefault(int(egid), []).append(ids)
+        return {e: sorted(set.intersection(*ls) or min(ls, key=len)) for e, ls in lists.items()}
 
     def blocks_for(self, egids: list[int], columns: list[str]) -> list[dict]:
         """One row per requested EGID found, with its block's columns plus `n_egids` in the block."""
