@@ -4,7 +4,7 @@
 
 Application web d'aide à la décision pour prioriser la rénovation et la
 décarbonation d'un parc municipal. Première version fonctionnelle avec
-**96 bâtiments entièrement fictifs**, sans accès API ni chatbot.
+les **770 bâtiments de la Ville de Genève** (SITG / QuantHome, `ville_geneve_core.geojson`), sans accès API ni chatbot. Régénérer les données : `npm run data`.
 
 ### Lancer l'application
 
