@@ -1,17 +1,21 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import {
-  ArrowDownRight, ArrowRight, Building2, CalendarDays, Check, ChevronRight,
+  ArrowRight, Building2, CalendarDays, Check, ChevronRight,
   CircleHelp, Download, Flame, Leaf, MapPin, Plus, RotateCcw, Search,
-  ShieldCheck, SlidersHorizontal, Sparkles, Trash2, TrendingUp, Wallet, X,
+  ChartScatter, Map as MapIcon, PlayCircle, ShieldCheck, SlidersHorizontal, Sparkles, Trash2, TrendingUp, Wallet, X,
 } from 'lucide-react';
+import Blason from './Blason';
 import BuildingMap from './BuildingMap';
+import ScatterPlot from './ScatterPlot';
+import Tour from './Tour';
+import { SHADES, SHAPES, shapeFor, symbolScale } from './symbols';
 import { BUILDINGS, BUILDING_USES } from './data';
 import {
   BASE_YEAR, COHORTS, CRITERIA, PRESETS, RENOVATION, assessPortfolio,
   programMetrics, renovationFor, selectProgram,
 } from './model';
-import type { Assessment, BuildingUse, Cohort, Strategy, StrategyId, Thresholds } from './model';
+import type { Assessment, Cohort, Strategy, StrategyId, Thresholds } from './model';
 
 const number = (value: number, digits = 0) => new Intl.NumberFormat('fr-CH', {
   minimumFractionDigits: digits, maximumFractionDigits: digits,
@@ -27,7 +31,7 @@ function ThresholdControls({ value, editable, onChange }: {
 }) {
   const fields = [
     { key: 'idc', title: 'Dépense de chaleur', unit: 'MJ/m²/an', min: 200, max: 1000, step: 10, sign: '>', description: 'IDC · priorité 1', icon: Flame },
-    { key: 'condition', title: 'État du bâtiment', unit: '/ 1', min: 0, max: 1, step: 0.05, sign: '<', description: 'Indice Stratus · priorité 2', icon: Building2 },
+    { key: 'condition', title: 'État du bâtiment', unit: '/ 1', min: 0, max: 1, step: 0.05, sign: '<', description: 'Vétusté (proxy Stratus) · priorité 2', icon: Building2 },
     { key: 'carbon', title: 'Intensité carbone', unit: 'kgCO₂e/m²/an', min: 1, max: 80, step: 1, sign: '>', description: 'Émissions d’exploitation · priorité 3', icon: Leaf },
   ] as const;
   return <div className="threshold-controls">
@@ -92,9 +96,9 @@ function BuildingDetail({ assessment, onClose }: { assessment: Assessment; onClo
   const renovation = dueYear === null ? null : renovationFor(building, dueYear);
   const state = COHORTS[assessment.cohort];
   return <section className="detail-card" aria-label={`Fiche de ${building.name}`}>
-    <div className="detail-heading"><div className="detail-icon"><Building2 size={23} /></div><div><small>{building.id} · {building.use}</small><h3>{building.name}</h3><p><MapPin size={13} /> {building.district} · Localisation fictive</p></div><button className="icon-button close-detail" aria-label="Fermer la fiche bâtiment" onClick={onClose}><X size={18} /></button></div>
+    <div className="detail-heading"><div className="detail-icon"><Building2 size={23} /></div><div><small>{building.id} · {building.use}</small><h3>{building.name}</h3><p><MapPin size={13} /> {building.district}{building.destination ? ` · ${building.destination}` : ''}</p></div><button className="icon-button close-detail" aria-label="Fermer la fiche bâtiment" onClick={onClose}><X size={18} /></button></div>
     <span className={`status-badge ${assessment.cohort}`}>{state.label}{dueYear !== null && ` · ${dueYear}`}</span>
-    <div className="detail-properties"><span>Surface énergétique<strong>{number(building.area)} m²</strong></span><span>Construction fictive<strong>{building.constructionYear}</strong></span><span>Chauffage actuel<strong>{building.heating}</strong></span><span>Dégradation simulée<strong>−{number(building.annualDecay, 3)} / an</strong></span></div>
+    <div className="detail-properties"><span>Surface énergétique<strong>{number(building.area)} m²</strong></span><span>Construction{building.imputed?.includes('year') ? ' (estimée)' : ''}<strong>{building.constructionYear}</strong></span><span>Chauffage actuel<strong>{building.heating}{building.fossil ? ' · fossile' : ''}</strong></span><span>Dégradation simulée<strong>−{number(building.annualDecay, 3)} / an</strong></span>{building.protection && building.protection !== 'none' && <span>Protection patrimoniale<strong>{building.protection}</strong></span>}{building.idcStatus && <span>Statut IDC (OCEN)<strong>{building.idcStatus}</strong></span>}</div>
     <h4>Pourquoi cette priorité ?</h4>
     {assessment.triggers.length > 0 ? <ul className="reason-list">
       {assessment.triggers.includes('idc') && <li><Flame size={15} /><span>IDC : <strong>{building.idc} &gt; {dueThresholds.idc}</strong> MJ/m²/an</span></li>}
@@ -112,14 +116,14 @@ function BuildingDetail({ assessment, onClose }: { assessment: Assessment; onClo
       {(renovation.idcAfter > dueThresholds.idc || renovation.carbonAfter > dueThresholds.carbon || renovation.conditionAfter < dueThresholds.condition)
         && <p className="residual-warning">L’intervention générique ne satisfait pas tous les seuils de cette stratégie. Une étude complémentaire est nécessaire.</p>}
     </>}
-    <small className="fiction-note">Données entièrement fictives · aucun diagnostic réel.</small>
+    <small className="fiction-note">Sources : SITG, QuantHome. Indice d’état = proxy (âge, travaux énergétiques récents), pas un diagnostic Stratus.{building.imputed && building.imputed.length > 0 && ` Valeurs estimées par défaut faute de donnée : ${building.imputed.map((key) => ({ idc: 'IDC', carbon: 'CO₂', year: 'année de construction' } as Record<string, string>)[key] ?? key).join(', ')}.`}{building.protection && building.protection !== 'none' && ' Bâtiment protégé : contraintes de rénovation de l’enveloppe probables.'}</small>
   </section>;
 }
 
 function exportProgram(program: Assessment[], strategy: Strategy) {
   const rows = [
-    ['Données fictives', `Stratégie : ${strategy.name}`, `Année de référence : ${BASE_YEAR}`],
-    ['ID', 'Nom fictif', 'Quartier', 'Usage', 'Échéance', 'Motifs', 'Surface m²', 'IDC MJ/m²/an', 'CO2 kg/m²/an', 'État actuel', 'État à échéance', 'Enveloppe CHF', 'Gain tCO2e/an'],
+    ['Données SITG / QuantHome (indice d’état = proxy)', `Stratégie : ${strategy.name}`, `Année de référence : ${BASE_YEAR}`],
+    ['ID', 'Adresse', 'Quartier', 'Usage', 'Échéance', 'Motifs', 'Surface m²', 'IDC MJ/m²/an', 'CO2 kg/m²/an', 'État actuel', 'État à échéance', 'Enveloppe CHF', 'Gain tCO2e/an'],
     ...program.map((item) => {
       const renovation = item.dueYear === null ? null : renovationFor(item.building, item.dueYear);
       return [
@@ -139,124 +143,176 @@ function exportProgram(program: Assessment[], strategy: Strategy) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+function ShapeIcon({ use, color = '#fff', size = 16 }: { use: string; color?: string; size?: number }) {
+  return <svg width={size} height={size} viewBox="-1.3 -1.3 2.6 2.6" aria-hidden="true"><path d={SHAPES[shapeFor(use)]} fill={color} stroke="#111" strokeWidth="0.16" strokeLinejoin="round" /></svg>;
+}
+
+function Legend({ counts, cohort, onCohort, useCounts, uses, onToggleUse, onClearUses }: {
+  counts: Record<string, number>; cohort: Cohort | null; onCohort: (value: Cohort | null) => void;
+  useCounts: Record<string, number>; uses: Set<string>; onToggleUse: (use: string) => void; onClearUses: () => void;
+}) {
+  const [open, setOpen] = useState(true);
+  return <aside className={`legend-panel ${open ? '' : 'collapsed'}`} data-tour="legend" aria-label="Légende et filtres">
+    <button className="legend-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>Légende & filtres <ChevronRight size={14} /></button>
+    {open && <>
+      <h4>Échéance <small>cliquer pour isoler</small></h4>
+      <div className="legend-list">
+        {cohortOrder.map((key) => <button key={key} aria-pressed={cohort === key} className={cohort === key ? 'active' : ''} onClick={() => onCohort(cohort === key ? null : key)}>
+          <span className="swatches">{key === 'safe' ? <i style={{ background: '#fff' }} /> : SHADES[key].map((color) => <i key={color} style={{ background: color }} />)}</span>
+          <span>{COHORTS[key].short}</span><strong>{counts[key]}</strong>
+        </button>)}
+      </div>
+      <p className="legend-hint">Les trois teintes = 1, 2 ou 3 critères dépassés (IDC, CO₂, vétusté).</p>
+      <h4>Affectation <small>{uses.size ? `${uses.size} sélectionnée(s)` : 'toutes'}</small>{uses.size > 0 && <button className="text-button" onClick={onClearUses}>Tout afficher</button>}</h4>
+      <div className="legend-list">
+        {BUILDING_USES.map((use) => <button key={use} aria-pressed={uses.has(use)} className={uses.has(use) ? 'active' : ''} onClick={() => onToggleUse(use)}>
+          <ShapeIcon use={use} color="#f6c51c" /><span>{use}</span><strong>{useCounts[use] ?? 0}</strong>
+        </button>)}
+      </div>
+      <h4>Taille <small>surface de référence énergétique</small></h4>
+      <div className="size-legend">{[200, 2000, 10000, 25000].map((sre) => <span key={sre}><svg width="40" height="40" viewBox="-20 -20 40 40" aria-hidden="true"><circle r={11 * symbolScale(sre)} fill="#f6c51c" stroke="#111" strokeWidth="1.3" /></svg>{number(sre)} m²</span>)}</div>
+    </>}
+  </aside>;
+}
+
 export default function App() {
   const [strategyId, setStrategyId] = useState<StrategyId>('conservative');
   const [customBase, setCustomBase] = useState<'conservative' | 'ambitious'>('conservative');
   const [custom, setCustom] = useState<Strategy>({ ...PRESETS.conservative, id: 'custom', name: 'Personnalisée', thresholds: { ...PRESETS.conservative.thresholds }, changes: [] });
   const [horizon, setHorizon] = useState(0);
   const [cohort, setCohort] = useState<Cohort | null>(null);
-  const [use, setUse] = useState<BuildingUse | 'all'>('all');
+  const [uses, setUses] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
+  const [tab, setTab] = useState<'map' | 'chart'>('map');
   const [showAssumptions, setShowAssumptions] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
   const strategy = strategyId === 'custom' ? custom : PRESETS[strategyId];
   const portfolio = useMemo(() => assessPortfolio(BUILDINGS, strategy), [strategy]);
   const filtered = useMemo(() => portfolio.filter((item) =>
-    (use === 'all' || item.building.use === use)
+    (uses.size === 0 || uses.has(item.building.use))
     && `${item.building.name} ${item.building.district} ${item.building.id}`.toLocaleLowerCase('fr').includes(query.trim().toLocaleLowerCase('fr')),
-  ), [portfolio, use, query]);
+  ), [portfolio, uses, query]);
   const program = selectProgram(filtered, horizon, cohort);
   const metrics = programMetrics(program);
-  const programIds = new Set(program.map((item) => item.building.id));
-  const selectedAssessment = filtered.find((item) => item.building.id === selected);
+  const programIds = useMemo(() => new Set(program.map((item) => item.building.id)), [program]);
+  // Une catégorie choisie n'affiche que ses points ; sinon les points hors horizon sont atténués.
+  const visible = useMemo(() => cohort ? filtered.filter((item) => item.cohort === cohort) : filtered, [filtered, cohort]);
+  const mutedIds = useMemo(() => cohort ? new Set<string>() : new Set(filtered.filter((item) => !programIds.has(item.building.id)).map((item) => item.building.id)), [filtered, cohort, programIds]);
+  const selectedAssessment = visible.find((item) => item.building.id === selected);
   const selectionLabel = cohort ? COHORTS[cohort].label
     : horizon === 0 ? 'Programme immédiat' : `Programme cumulé d’ici ${BASE_YEAR + horizon}`;
   const counts = Object.fromEntries(cohortOrder.map((key) => [key, filtered.filter((item) => item.cohort === key).length]));
+  const useCounts = useMemo(() => {
+    const result: Record<string, number> = {};
+    for (const item of portfolio) result[item.building.use] = (result[item.building.use] ?? 0) + 1;
+    return result;
+  }, [portfolio]);
 
   function resetCustom(base = customBase) {
     setCustomBase(base);
     setCustom({ ...PRESETS[base], id: 'custom', name: 'Personnalisée', thresholds: { ...PRESETS[base].thresholds }, changes: [] });
   }
+  function toggleUse(use: string) {
+    setUses((current) => { const next = new Set(current); if (!next.delete(use)) next.add(use); return next; });
+    setSelected(null);
+  }
+  const onTourEnter = useCallback((action: 'tab-map' | 'tab-chart') => setTab(action === 'tab-map' ? 'map' : 'chart'), []);
 
   return <div className="app-shell">
     <header className="topbar">
-      <a className="brand" href="#main"><span className="brand-symbol"><Leaf size={23} /></span><span>énergi<span className="brand-emphasis">ACK</span><small>LA TRANSITION, BÂTIMENT PAR BÂTIMENT</small></span></a>
-      <div className="topbar-divider" />
-      <div className="territory"><MapPin size={17} /><span>Ville de Genève<small>Pilotage du patrimoine municipal</small></span></div>
-      <div className="topbar-right"><span className="demo-tag"><span /> DÉMONSTRATEUR</span><button className="help-button" onClick={() => setShowAssumptions(!showAssumptions)} aria-expanded={showAssumptions}><CircleHelp size={17} /> Méthode & hypothèses</button></div>
+      <a className="brand" href="#main"><Blason size={34} /><span>énergi<span className="brand-emphasis">ACK</span><small>VILLE DE GENÈVE · SORTIE DES ÉNERGIES FOSSILES</small></span></a>
+      <div className="topbar-right">
+        <span className="topbar-count"><strong>{BUILDINGS.length}</strong> bâtiments de la Ville</span>
+        <button className="help-button" onClick={() => setTourOpen(true)}><PlayCircle size={16} /> Visite guidée</button>
+        <button className="help-button" onClick={() => setShowAssumptions(true)} aria-expanded={showAssumptions}><CircleHelp size={16} /> Méthode & hypothèses</button>
+      </div>
     </header>
 
-    <main id="main">
-      <section className="page-heading">
-        <div><div className="eyebrow"><span /> STRATÉGIE TERRITORIALE · {BASE_YEAR}—{BASE_YEAR + 10}</div><h1>Une trajectoire claire.<br /><span>Un patrimoine qui se transforme.</span></h1><p>Priorisez les rénovations et mesurez leur potentiel pour sortir des énergies fossiles.</p></div>
-        <div className="portfolio-summary"><div className="portfolio-summary-icon"><Building2 size={24} /></div><div><strong>{BUILDINGS.length}</strong><span>bâtiments fictifs<br />du parc municipal</span></div></div>
-      </section>
-
-      <div className="simulation-notice"><ShieldCheck size={16} /><span><strong>Mode simulation.</strong> Données, coûts et projections fictifs. Seuils non validés réglementairement ; aucune clé API utilisée.</span><span className="notice-year">RÉFÉRENCE {BASE_YEAR}</span></div>
-
-      {showAssumptions && <section className="assumptions-panel" aria-label="Méthode et hypothèses">
-        <div className="panel-heading"><h2>Une méthode lisible, pas une boîte noire</h2><button className="icon-button" aria-label="Fermer les hypothèses" onClick={() => setShowAssumptions(false)}><X size={18} /></button></div>
+    {showAssumptions && <div className="drawer-backdrop" onClick={() => setShowAssumptions(false)}>
+      <section className="assumptions-panel" role="dialog" aria-label="Méthode et hypothèses" onClick={(event) => event.stopPropagation()}>
+        <div className="panel-heading"><h2>Méthode & hypothèses</h2><button className="icon-button" autoFocus aria-label="Fermer les hypothèses" onClick={() => setShowAssumptions(false)}><X size={18} /></button></div>
+        <p className="data-note"><ShieldCheck size={15} /> <span><strong>Données réelles, projections simulées.</strong> Parc SITG / QuantHome ; IDC et CO₂ parfois estimés, indice d’état déduit (proxy). Coûts et seuils non validés réglementairement. Année de référence {BASE_YEAR}.</span></p>
         <div className="assumptions-grid">
           <div><h3>Déclenchement et priorité</h3><p>Un seul critère hors seuil suffit. Premier franchissement calculé chaque année de {BASE_YEAR} à {BASE_YEAR + 10}. Tri par année, puis critères déclenchés : IDC → état → CO₂, puis gain carbone annuel décroissant.</p></div>
           <div><h3>Projection sans travaux</h3><p>État(t) = max(0, état initial − dégradation annuelle × années). IDC et CO₂ constants. Un changement de seuil s’applique dès son année et reste actif jusqu’au suivant. Aucun calendrier légal chargé.</p></div>
           <div><h3>Intervention générique</h3><p>Chaleur −{percent(RENOVATION.heatReduction)} ; état relevé à au moins {number(RENOVATION.targetCondition, 2)}. Carbone après = minimum du carbone actuel et IDC après ÷ 3,6 × {number(RENOVATION.lowCarbonFactor, 3)} kgCO₂e/kWh.</p></div>
-          <div><h3>Coûts et agrégation</h3><p>Coût = surface × [{RENOVATION.fixedCostPerM2} + {RENOVATION.conditionCostPerM2} × (1 − état à l’échéance)] CHF/m². Moyennes pondérées par la surface, même périmètre avant/après, interventions réalisées à l’échéance. Hors inflation, subventions, frais d’exploitation et carbone des travaux.</p></div>
+          <div><h3>Coûts et agrégation</h3><p>Coût = surface × [{RENOVATION.fixedCostPerM2} + {RENOVATION.conditionCostPerM2} × (1 − état à l’échéance)] CHF/m². Moyennes pondérées par la surface, même périmètre avant/après. Hors inflation, subventions, frais d’exploitation et carbone des travaux.</p></div>
+          <div><h3>Lecture de la carte</h3><p>Taille du symbole ∝ √SRE, forme = affectation, couleur = échéance (rouge : immédiat, jaune : sous 5 ans, gris : sous 10 ans, blanc : surveillance), teinte plus foncée = plus de critères dépassés.</p></div>
         </div>
         <p className="assumption-footer">Les KPI sont le potentiel annuel des travaux achevés, pas un cumul des émissions évitées. La faisabilité technique, le patrimoine protégé et les contraintes de réseau ne sont pas modélisés. La maquette ne démontre pas la sortie complète des fossiles.</p>
-      </section>}
+      </section>
+    </div>}
 
+    <main id="main">
       <div className="workspace">
         <aside className="strategy-panel">
-          <div className="section-label"><SlidersHorizontal size={16} /> VOTRE STRATÉGIE</div>
-          <h2>Choisir le cap</h2><p className="panel-description">Trois approches pour éclairer vos arbitrages.</p>
-          <div className="strategy-options">
-            {([
-              { id: 'conservative', title: 'Conservatoire', subtitle: 'Cadre législatif à valider', icon: ShieldCheck, index: '01' },
-              { id: 'ambitious', title: 'Accélération carbone', subtitle: 'Une ambition visionnaire', icon: Sparkles, index: '02' },
-              { id: 'custom', title: 'À votre mesure', subtitle: 'Seuils et trajectoire libres', icon: SlidersHorizontal, index: '03' },
-            ] as const).map(({ id, title, subtitle, icon: Icon, index }) => <button key={id} className={`strategy-option ${strategyId === id ? 'active' : ''}`} aria-pressed={strategyId === id} onClick={() => setStrategyId(id)}>
-              <span className="strategy-option-icon"><Icon size={18} /></span><span><strong>{title}</strong><small>{subtitle}</small></span><span className="strategy-option-number">{strategyId === id ? <Check size={17} /> : index}</span>
-            </button>)}
+          <div data-tour="strategies">
+            <div className="section-label"><SlidersHorizontal size={16} /> SCÉNARIO</div>
+            <div className="strategy-options">
+              {([
+                { id: 'conservative', title: 'Conservatoire', subtitle: 'Cadre législatif à valider', icon: ShieldCheck, index: '01' },
+                { id: 'ambitious', title: 'Accélération carbone', subtitle: 'Une ambition visionnaire', icon: Sparkles, index: '02' },
+                { id: 'custom', title: 'À votre mesure', subtitle: 'Seuils et trajectoire libres', icon: SlidersHorizontal, index: '03' },
+              ] as const).map(({ id, title, subtitle, icon: Icon, index }) => <button key={id} className={`strategy-option ${strategyId === id ? 'active' : ''}`} aria-pressed={strategyId === id} onClick={() => setStrategyId(id)}>
+                <span className="strategy-option-icon"><Icon size={18} /></span><span><strong>{title}</strong><small>{subtitle}</small></span><span className="strategy-option-number">{strategyId === id ? <Check size={17} /> : index}</span>
+              </button>)}
+            </div>
           </div>
           {strategyId === 'custom' && <div className="custom-base"><label htmlFor="custom-base">Partir de la stratégie</label><select id="custom-base" value={customBase} onChange={(event) => resetCustom(event.target.value === 'ambitious' ? 'ambitious' : 'conservative')}><option value="conservative">Conservatoire</option><option value="ambitious">Accélération carbone</option></select><small>Changer la base réinitialise les curseurs et les seuils futurs.</small></div>}
-          <div className="threshold-heading"><h3>Seuils en {BASE_YEAR}</h3>{strategyId === 'custom' ? <button className="icon-button" aria-label="Réinitialiser la stratégie personnalisée" onClick={() => resetCustom()}><RotateCcw size={14} /></button> : <span className="fixed-tag">PRÉDÉFINIS</span>}</div>
-          <ThresholdControls value={strategy.thresholds} editable={strategyId === 'custom'} onChange={(thresholds) => setCustom({ ...custom, thresholds })} />
-          {strategyId !== 'custom' && <button className="text-button customize-link" onClick={() => { resetCustom(strategyId); setStrategyId('custom'); }}>Personnaliser cette stratégie <ArrowRight size={14} /></button>}
+          <div data-tour="thresholds">
+            <div className="threshold-heading"><h3>Seuils en {BASE_YEAR}</h3>{strategyId === 'custom' ? <button className="icon-button" aria-label="Réinitialiser la stratégie personnalisée" onClick={() => resetCustom()}><RotateCcw size={14} /></button> : <span className="fixed-tag">PRÉDÉFINIS</span>}</div>
+            <ThresholdControls value={strategy.thresholds} editable={strategyId === 'custom'} onChange={(thresholds) => setCustom({ ...custom, thresholds })} />
+            {strategyId !== 'custom' && <button className="text-button customize-link" onClick={() => { resetCustom(strategyId); setStrategyId('custom'); }}>Personnaliser cette stratégie <ArrowRight size={14} /></button>}
+          </div>
           {strategyId === 'custom' ? <FutureThresholds key={customBase} strategy={custom} onChange={setCustom} /> : <div className="calendar-note"><CalendarDays size={17} /><p><strong>Seuils constants par défaut</strong>Aucun calendrier réglementaire chargé. Simulez une évolution dans « À votre mesure ».</p></div>}
-          <div className="priority-note"><span className="live-dot" /><p>Un critère suffit à déclencher.<br /><strong>Priorité IDC → état → CO₂</strong></p></div>
+          <div className="priority-note"><span className="live-dot" /><p>Un critère suffit à déclencher. <strong>Priorité IDC → état → CO₂</strong></p></div>
         </aside>
 
-        <div className="dashboard">
-          <section className="program-toolbar">
-            <div><div className="section-label">IMPACT DU PROGRAMME</div><h2>{selectionLabel}</h2><p>{metrics.count} bâtiment{metrics.count > 1 ? 's' : ''} à rénover · {number(metrics.area)} m² concernés{cohort === 'safe' && ` · ${program.length} bâtiment(s) en surveillance`}</p></div>
+        <div className="stage">
+          <section className="kpi-strip" data-tour="kpis" aria-live="polite" aria-atomic="true" data-testid="kpis">
+            <div className="kpi-title"><div className="section-label">{selectionLabel.toUpperCase()}</div><p>{metrics.count} bât. à rénover · {number(metrics.area)} m²{cohort === 'safe' && ` · ${program.length} en surveillance`}</p></div>
+            <article className="kpi-card"><div className="kpi-label"><span>Enveloppe</span><Wallet size={14} /></div><div className="kpi-value">{money(metrics.cost)}<small>CHF</small></div></article>
+            <article className="kpi-card"><div className="kpi-label"><span>CO₂ évitable / an</span><Leaf size={14} /></div><div className="kpi-value">{number(metrics.carbonSaved)}<small>tCO₂e · {percent(metrics.carbonReduction)}</small></div></article>
+            <article className="kpi-card"><div className="kpi-label"><span>IDC moyen</span><Flame size={14} /></div><div className="kpi-value transition-value">{metrics.count ? number(metrics.idcBefore) : '—'}<ArrowRight size={15} /><span>{metrics.count ? number(metrics.idcAfter) : '—'}</span></div></article>
+            <article className="kpi-card"><div className="kpi-label"><span>État moyen</span><TrendingUp size={14} /></div><div className="kpi-value transition-value">{metrics.count ? number(metrics.conditionBefore, 2) : '—'}<ArrowRight size={15} /><span>{metrics.count ? number(metrics.conditionAfter, 2) : '—'}</span></div></article>
             <div className="horizon-control" aria-label="Horizon du programme cumulé">{[0, 5, 10].map((value) => <button key={value} className={cohort === null && horizon === value ? 'active' : ''} aria-pressed={cohort === null && horizon === value} onClick={() => { setHorizon(value); setCohort(null); }}>{value === 0 ? 'Aujourd’hui' : `D’ici ${BASE_YEAR + value}`}</button>)}</div>
           </section>
-          <div className="kpi-grid" aria-live="polite" aria-atomic="true" data-testid="kpis">
-            <article className="kpi-card"><div className="kpi-label"><span>Enveloppe stratégique</span><Wallet size={17} /></div><div className="kpi-value">{money(metrics.cost)}<small>CHF</small></div><div className="kpi-footnote">Investissement estimé · non voté</div></article>
-            <article className="kpi-card"><div className="kpi-label"><span>CO₂ évitable / an</span><Leaf size={17} /></div><div className="kpi-value">{number(metrics.carbonSaved)}<small>tCO₂e</small></div><div className="kpi-footnote positive"><ArrowDownRight size={14} /> {percent(metrics.carbonReduction)} des émissions sélectionnées</div></article>
-            <article className="kpi-card"><div className="kpi-label"><span>IDC moyen</span><Flame size={17} /></div><div className="kpi-value transition-value">{metrics.count ? number(metrics.idcBefore) : '—'}<ArrowRight size={17} /><span>{metrics.count ? number(metrics.idcAfter) : '—'}</span></div><div className="kpi-footnote">MJ/m²/an · pondéré par surface</div></article>
-            <article className="kpi-card"><div className="kpi-label"><span>État moyen du parc</span><TrendingUp size={17} /></div><div className="kpi-value transition-value">{metrics.count ? number(metrics.conditionBefore, 2) : '—'}<ArrowRight size={17} /><span>{metrics.count ? number(metrics.conditionAfter, 2) : '—'}</span></div><div className="kpi-footnote">Indice 0 = ruine · 1 = neuf</div></article>
-          </div>
 
-          <section className="map-panel">
-            <div className="map-panel-header"><div><h2>Le territoire, bâtiment par bâtiment</h2><p>Les couleurs indiquent l’échéance sans travaux. Les points atténués sont hors sélection.</p></div><span className="map-count"><MapPin size={13} /> {filtered.length} points</span></div>
-            <div className="map-filters"><label className="search-box"><Search size={16} /><input type="search" aria-label="Rechercher un bâtiment ou quartier" placeholder="Bâtiment, quartier, identifiant…" value={query} onChange={(event) => { setQuery(event.target.value); setSelected(null); }} /></label><select aria-label="Filtrer par usage" value={use} onChange={(event) => { const next = BUILDING_USES.find((item) => item === event.target.value); setUse(next ?? 'all'); setSelected(null); }}><option value="all">Tous les usages</option>{BUILDING_USES.map((item) => <option key={item} value={item}>{item}</option>)}</select>{(query || use !== 'all') && <button className="icon-button" aria-label="Effacer les filtres" onClick={() => { setUse('all'); setQuery(''); }}><X size={16} /></button>}</div>
-            <BuildingMap assessments={filtered} programIds={programIds} selected={selectedAssessment?.building.id ?? null} onSelect={setSelected} />
-            <div className="map-legend" aria-label="Sélectionner une catégorie de priorité">
-              {cohortOrder.map((key) => <button key={key} aria-pressed={cohort === key} className={cohort === key ? 'active' : ''} onClick={() => setCohort(cohort === key ? null : key)}><span className={`legend-dot ${key}`} /><span>{COHORTS[key].short}</span><strong>{counts[key]}</strong></button>)}
+          <section className="view-panel" data-tour="map">
+            <div className="view-header">
+              <div className="tabs" role="tablist">
+                <button role="tab" aria-selected={tab === 'map'} className={tab === 'map' ? 'active' : ''} onClick={() => setTab('map')}><MapIcon size={15} /> Carte</button>
+                <button role="tab" aria-selected={tab === 'chart'} className={tab === 'chart' ? 'active' : ''} data-tour="chart-tab" onClick={() => setTab('chart')}><ChartScatter size={15} /> Diagramme IDC × CO₂</button>
+              </div>
+              <label className="search-box"><Search size={15} /><input type="search" aria-label="Rechercher un bâtiment ou quartier" placeholder="Adresse, quartier, EGID…" value={query} onChange={(event) => { setQuery(event.target.value); setSelected(null); }} /></label>
+              <span className="map-count"><MapPin size={13} /> {visible.length} / {BUILDINGS.length}</span>
+            </div>
+            <div className="view-body">
+              <div className={`view-pane ${tab === 'map' ? '' : 'hidden'}`}><BuildingMap assessments={visible} mutedIds={mutedIds} selected={selectedAssessment?.building.id ?? null} active={tab === 'map'} onSelect={setSelected} /></div>
+              {tab === 'chart' && <div className="view-pane"><ScatterPlot assessments={visible} mutedIds={mutedIds} selected={selectedAssessment?.building.id ?? null} strategy={strategy} year={BASE_YEAR + horizon} onSelect={setSelected} /></div>}
+              <Legend counts={counts} cohort={cohort} onCohort={(value) => { setCohort(value); setSelected(null); }} useCounts={useCounts} uses={uses} onToggleUse={toggleUse} onClearUses={() => setUses(new Set())} />
+              {selectedAssessment && <div className="detail-float"><BuildingDetail assessment={selectedAssessment} onClose={() => setSelected(null)} /></div>}
             </div>
           </section>
 
-          <div className={`lower-grid ${selectedAssessment ? 'with-detail' : ''}`}>
-            <section className="building-list">
-              <div className="list-heading"><div><h2>{cohort === 'safe' ? 'Bâtiments à surveiller' : 'Votre feuille de route'}</h2><p>{program.length} bâtiments · {cohort === 'safe' ? 'pas de rénovation simulée' : 'échéance, critères puis impact carbone'}</p></div><button className="export-button" disabled={program.length === 0} onClick={() => exportProgram(program, strategy)}><Download size={15} /> Export CSV</button></div>
-              <div className="table-scroll"><table><thead><tr><th>Bâtiment / quartier</th><th>Échéance</th><th>IDC<small>MJ/m²/an</small></th><th>État</th><th>CO₂<small>kg/m²/an</small></th><th>Motif principal</th><th aria-label="Ouvrir la fiche" /></tr></thead><tbody>
-                {program.map((item) => <tr key={item.building.id} className={selected === item.building.id ? 'selected-row' : ''}>
-                  <td><button className="building-name" onClick={() => setSelected(item.building.id)}>{item.building.name}<small>{item.building.district} · {item.building.use}</small></button></td>
-                  <td><span className={`table-status ${item.cohort}`}><span />{item.dueYear ?? 'Suivi'}</span></td>
-                  <td>{item.building.idc}</td><td>{number(item.building.condition, 2)}</td><td>{number(item.building.carbonIntensity, 1)}</td>
-                  <td><span className="reason-tag">{item.triggers[0] ? CRITERIA[item.triggers[0]] : 'Aucun seuil franchi'}</span></td>
-                  <td><button className="icon-button" aria-label={`Ouvrir ${item.building.name}`} onClick={() => setSelected(item.building.id)}><ChevronRight size={16} /></button></td>
-                </tr>)}
-              </tbody></table></div>
-              {program.length === 0 && <div className="empty-state"><Building2 size={27} /><h3>Aucun bâtiment dans cette sélection</h3><p>Changez d’horizon, de catégorie ou de filtre pour explorer le parc.</p></div>}
-            </section>
-            {selectedAssessment && <BuildingDetail assessment={selectedAssessment} onClose={() => setSelected(null)} />}
-          </div>
-          <div className="dashboard-footer"><span><ShieldCheck size={14} /> Calculs déterministes et explicables</span><span>Chaque rénovation comptée une seule fois · hypothèses disponibles en haut de page</span></div>
+          <section className="building-list" data-tour="roadmap">
+            <div className="list-heading"><div><h2>{cohort === 'safe' ? 'Bâtiments à surveiller' : 'Votre feuille de route'}</h2><p>{program.length} bâtiments · {cohort === 'safe' ? 'pas de rénovation simulée' : 'échéance, critères puis impact carbone'}</p></div><button className="export-button" disabled={program.length === 0} onClick={() => exportProgram(program, strategy)}><Download size={15} /> Export CSV</button></div>
+            <div className="table-scroll"><table><thead><tr><th>Bâtiment / quartier</th><th>Échéance</th><th>IDC<small>MJ/m²/an</small></th><th>État</th><th>CO₂<small>kg/m²/an</small></th><th>Motif principal</th><th aria-label="Ouvrir la fiche" /></tr></thead><tbody>
+              {program.map((item) => <tr key={item.building.id} className={selected === item.building.id ? 'selected-row' : ''}>
+                <td><button className="building-name" onClick={() => { setSelected(item.building.id); if (tab === 'map') window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{item.building.name}<small>{item.building.district} · {item.building.use}</small></button></td>
+                <td><span className={`table-status ${item.cohort}`}><span />{item.dueYear ?? 'Suivi'}</span></td>
+                <td>{item.building.idc}</td><td>{number(item.building.condition, 2)}</td><td>{number(item.building.carbonIntensity, 1)}</td>
+                <td><span className="reason-tag">{item.triggers[0] ? CRITERIA[item.triggers[0]] : 'Aucun seuil franchi'}</span></td>
+                <td><button className="icon-button" aria-label={`Ouvrir ${item.building.name}`} onClick={() => setSelected(item.building.id)}><ChevronRight size={16} /></button></td>
+              </tr>)}
+            </tbody></table></div>
+            {program.length === 0 && <div className="empty-state"><Building2 size={27} /><h3>Aucun bâtiment dans cette sélection</h3><p>Changez d’horizon, de catégorie ou de filtre pour explorer le parc.</p></div>}
+          </section>
         </div>
       </div>
     </main>
-    <footer className="site-footer"><span>énergiACK <span>·</span> Défi 5 — Sortir des énergies fossiles</span><span>Genève, un cap commun.</span></footer>
+    <footer className="site-footer"><span>énergiACK <span>·</span> Défi 5 — Sortir des énergies fossiles</span><span>Données SITG / QuantHome · fond de carte swisstopo</span></footer>
+    <Tour open={tourOpen} onClose={() => setTourOpen(false)} onEnter={onTourEnter} />
   </div>;
 }

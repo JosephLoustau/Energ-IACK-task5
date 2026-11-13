@@ -1,8 +1,10 @@
 export const BASE_YEAR = 2026;
 export const MAX_HORIZON = 10;
 
-export type BuildingUse = 'École' | 'Musée' | 'Administration' | 'Sport' | 'Logement';
-export type Heating = 'Gaz' | 'Mazout' | 'CAD' | 'Pompe à chaleur';
+export type BuildingUse = 'École' | 'Musée' | 'Administration' | 'Sport' | 'Logement'
+  | 'Éducation' | 'Logement mixte' | 'Commerce & ateliers' | 'Culture & loisirs' | 'Santé & social';
+export type Heating = 'Gaz' | 'Mazout' | 'CAD' | 'Pompe à chaleur'
+  | 'Gaz + mazout' | 'Bois / biogaz' | 'Électrique' | 'Inconnu';
 export type Criterion = 'idc' | 'condition' | 'carbon';
 export type Cohort = 'now' | 'five' | 'ten' | 'safe';
 export type StrategyId = 'conservative' | 'ambitious' | 'custom';
@@ -20,6 +22,15 @@ export interface Building {
   idc: number;
   carbonIntensity: number;
   heating: Heating;
+  /** Champs optionnels fournis par le jeu de données réel (SITG / QuantHome). */
+  destination?: string;
+  fossil?: boolean;
+  protection?: string;
+  idcStatus?: string;
+  idcSource?: string;
+  cadAvailable?: boolean;
+  /** Valeurs complétées faute de donnée : 'idc' | 'carbon' | 'year'. */
+  imputed?: string[];
 }
 
 export interface Thresholds {
