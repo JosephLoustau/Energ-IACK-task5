@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { createDemoBuildings } from './data';
 import {
-  BASE_YEAR, DEGRADATION, PRESETS, RENOVATION, assessBuilding, assessPortfolio, conditionAt, conditionAtAge,
+  BASE_YEAR, PRESETS, assessBuilding, assessPortfolio, conditionAt, conditionAtAge,
   effectiveAge, withConditionModel,
   programMetrics, renovationFor, selectProgram, thresholdsAt, triggeredCriteria, validateStrategy,
 } from './model';
 import type { Building, Strategy } from './model';
+import { ELECTRICITY_EMISSION, PV, RENT, SOCIAL_CARBON_COST, annuity, heatPumpCost, planRenovation } from './renovation';
 
 const building: Building = {
   id: 'TEST-1',
@@ -154,22 +155,93 @@ describe('Priorités et sélections', () => {
 });
 
 describe('Rénovation et indicateurs', () => {
-  it('calcule un coût à l’échéance, une baisse de chaleur et un carbone cohérent', () => {
+  it('calcule le coût comme la somme des mesures, avec PAC pour un chauffage fossile', () => {
     const result = renovationFor(building, BASE_YEAR + 5);
-    expect(result.conditionBefore).toBeCloseTo(0.85);
-    expect(result.cost).toBeCloseTo(1000 * (550 + 900 * 0.15));
-    expect(result.idcAfter).toBeCloseTo(220);
-    expect(result.carbonAfter).toBeCloseTo(220 / 3.6 * 0.035);
+    const plan = planRenovation(building);
+    expect(plan.heatPump).toBe(true);
+    expect(plan.measures.map((m) => m.id)).toEqual(['facade', 'toit', 'cave', 'fenetres', 'pac', 'pv']);
+    expect(result.cost).toBeCloseTo(plan.measures.reduce((sum, m) => sum + m.cost, 0));
+    expect(result.cost).toBe(plan.capex);
+    expect(plan.measures.find((m) => m.id === 'facade')!.cost).toBeCloseTo(0.8 * 1000 * 200);
+    expect(result.idcAfter).toBeLessThan(building.idc);
+    expect(result.carbonAfter).toBeLessThan(building.carbonIntensity);
     expect(result.carbonSaved).toBeCloseTo((5 - result.carbonAfter) * 1000 / 1000);
-    expect(result.conditionAfter).toBe(0.92);
+    expect(result.conditionBefore).toBeCloseTo(conditionAt(building, BASE_YEAR + 5));
+    expect(result.conditionAfter).toBe(1);
   });
 
-  it('ne détériore pas un bâtiment déjà en excellent état ou très décarboné', () => {
-    const sample = { ...building, condition: 0.98, carbonIntensity: 0.1 };
-    const result = renovationFor(sample, BASE_YEAR);
-    expect(result.conditionAfter).toBe(0.98);
-    expect(result.carbonAfter).toBe(0.1);
-    expect(result.carbonSaved).toBe(0);
+  it('n’ajoute pas de PAC si le chauffage est déjà décarboné et utilise l’isolation intérieure en cas de protection', () => {
+    const plan = planRenovation({ ...building, heating: 'CAD', protection: 'classé' });
+    expect(plan.heatPump).toBe(false);
+    expect(plan.measures.some((m) => m.id === 'pac')).toBe(false);
+    const facade = plan.measures.find((m) => m.id === 'facade')!;
+    expect(facade.proxy).toBe(true);
+    expect(facade.unitCost).toBeCloseTo(91.1 + 2.6 * 12);
+    expect(plan.after.carbon).toBeLessThanOrEqual(building.carbonIntensity);
+  });
+
+  it('sépare enveloppe thermique et équipements techniques', () => {
+    const { measures, after } = planRenovation(building);
+    const sum = (category: string) => measures.filter((m) => m.category === category).reduce((s, m) => s + m.annualCost, 0);
+    expect(measures.filter((m) => m.category === 'enveloppe').map((m) => m.id)).toEqual(['facade', 'toit', 'cave', 'fenetres']);
+    expect(measures.filter((m) => m.category === 'equipement').map((m) => m.id)).toEqual(['pac', 'pv']);
+    expect(after.envelopeCost).toBeCloseTo(sum('enveloppe'));
+    expect(after.equipmentCost).toBeCloseTo(sum('equipement'));
+    expect(after.renovationCost).toBeCloseTo(after.envelopeCost + after.equipmentCost);
+  });
+
+  it('dimensionne le photovoltaïque sur l’électricité de chauffage et réduit les imports', () => {
+    const plan = planRenovation(building);
+    const pv = plan.measures.find((m) => m.id === 'pv')!;
+    expect(pv.unitCost).toBe(PV.costPerKwc);
+    expect(plan.pv.production).toBeCloseTo(pv.quantity * PV.yield);
+    expect(plan.pv.production).toBeLessThanOrEqual(plan.after.finalKwh + 1e-6);
+    const without = planRenovation({ ...building, protection: 'classé' });
+    expect(plan.after.energyCost).toBeLessThan(without.after.energyCost);
+    expect(plan.after.carbon).toBeLessThan(without.after.carbon);
+    expect(plan.after.carbon).toBeCloseTo(Math.max(0, plan.after.finalKwh - plan.pv.production) / 1000 * ELECTRICITY_EMISSION);
+  });
+
+  it('n’installe pas de photovoltaïque sur un bâtiment protégé et l’indique', () => {
+    for (const protection of ['classé', 'inventaire']) {
+      const plan = planRenovation({ ...building, protection });
+      expect(plan.measures.some((m) => m.id === 'pv')).toBe(false);
+      expect(plan.pv.blocked).toBe(true);
+      expect(plan.pv.reason).toContain('protégé');
+    }
+    expect(planRenovation({ ...building, protection: 'none' }).pv.blocked).toBe(false);
+  });
+
+  it('calcule les loyers : manque à gagner réparti sur 30 ans et hausse de confort', () => {
+    const none = planRenovation(building);
+    expect(none.rent).toEqual({ base: 0, loss: 0, gain: 0, net: 0 });
+    const plan = planRenovation({ ...building, rentResidential: 300_000 });
+    expect(plan.rent.loss).toBeCloseTo(300_000 * RENT.lossYears / RENT.spreadYears);
+    expect(plan.rent.gain).toBeCloseTo(300_000 * RENT.comfortUplift);
+    expect(plan.rent.net).toBeCloseTo(plan.rent.gain - plan.rent.loss);
+    expect(plan.before.rentLoss).toBe(0);
+    expect(plan.after.rentLoss).toBeCloseTo(plan.rent.loss);
+    expect(plan.after.rentGain).toBeCloseTo(plan.rent.gain);
+  });
+
+  it('interpole le coût de PAC sur la figure 47 de LICS2022', () => {
+    expect(heatPumpCost(3)).toBeCloseTo(47_900);
+    expect(heatPumpCost(5)).toBeCloseTo(47_900);
+    expect(heatPumpCost(10)).toBeCloseTo(52_700);
+    expect(heatPumpCost(15)).toBeCloseTo((52.7 + 72.8) / 2 * 1000);
+    expect(heatPumpCost(200)).toBeCloseTo(641_100);
+    expect(heatPumpCost(400)).toBeCloseTo(641_100 * 2);
+    expect(annuity(20, 0.03)).toBeCloseTo(0.0672, 3);
+  });
+
+  it('décompose le coût annuel : énergie, rénovation annualisée et coût social du carbone', () => {
+    const { before, after, measures } = planRenovation(building);
+    expect(before.renovationCost).toBe(0);
+    expect(before.carbonCost).toBeCloseTo(5 * 1000 / 1000 * SOCIAL_CARBON_COST);
+    expect(before.total).toBeCloseTo(before.energyCost + before.carbonCost);
+    expect(after.renovationCost).toBeCloseTo(measures.reduce((sum, m) => sum + m.annualCost, 0));
+    expect(after.total).toBeCloseTo(after.energyCost + after.renovationCost + after.carbonCost);
+    expect(before.energyCost).toBeCloseTo(400 / 3.6 * 1000 * 0.09);
   });
 
   it('pondère les moyennes par surface sur le même périmètre avant/après', () => {
@@ -179,12 +251,13 @@ describe('Rénovation et indicateurs', () => {
     ];
     const assessments = assessPortfolio(samples, PRESETS.conservative);
     const metrics = programMetrics(assessments);
+    const after = samples.map((sample) => renovationFor(sample, BASE_YEAR).idcAfter * sample.area);
     expect(metrics.count).toBe(2);
     expect(metrics.area).toBe(1000);
     expect(metrics.idcBefore).toBeCloseTo(430);
-    expect(metrics.idcAfter).toBeCloseTo(430 * (1 - RENOVATION.heatReduction));
+    expect(metrics.idcAfter).toBeCloseTo((after[0]! + after[1]!) / 1000);
     expect(metrics.conditionBefore).toBeCloseTo(0.31);
-    expect(metrics.conditionAfter).toBeCloseTo(0.92);
+    expect(metrics.conditionAfter).toBeCloseTo(1);
     expect(metrics.carbonBefore).toBeCloseTo(23);
     expect(metrics.carbonSaved).toBeCloseTo(assessments.reduce((sum, item) => sum + renovationFor(item.building, BASE_YEAR).carbonSaved, 0));
   });
@@ -196,9 +269,13 @@ describe('Rénovation et indicateurs', () => {
     expect(programMetrics([safe])).toEqual(empty);
   });
 
-  it('un programme ambitieux peut conserver un dépassement : pas de conformité inventée', () => {
-    const result = renovationFor({ ...building, idc: 1000 }, BASE_YEAR);
-    expect(result.idcAfter).toBeGreaterThan(PRESETS.ambitious.thresholds.idc);
+  it('reste fini et cohérent pour tout le parc de démonstration', () => {
+    for (const sample of createDemoBuildings()) {
+      const plan = planRenovation(sample);
+      expect(Object.values(plan.after).every(Number.isFinite)).toBe(true);
+      expect(plan.after.idc).toBeLessThanOrEqual(plan.before.idc + 1e-9);
+      expect(plan.capex).toBeGreaterThan(0);
+    }
   });
 });
 
@@ -247,31 +324,37 @@ describe('Données de démonstration et validation', () => {
   });
 });
 
-describe('modèle d’état en S', () => {
-  it('vaut 1 à l’âge 0, décroît et reste au-dessus du plancher', () => {
-    expect(conditionAtAge(0)).toBeCloseTo(1, 10);
-    const values = Array.from({ length: 121 }, (_, age) => conditionAtAge(age));
-    values.slice(1).forEach((v, i) => expect(v).toBeLessThan(values[i]!));
-    expect(values.at(-1)!).toBeGreaterThan(DEGRADATION.floor);
+describe('modèle d’état linéaire par morceaux', () => {
+  it('vaut 1 pendant 10 ans, puis perd 0,01 par an jusqu’à 0,40 à 70 ans', () => {
+    expect(conditionAtAge(0)).toBe(1);
+    expect(conditionAtAge(10)).toBe(1);
+    expect(conditionAtAge(11)).toBeCloseTo(0.99);
+    expect(conditionAtAge(40)).toBeCloseTo(0.70);
+    expect(conditionAtAge(70)).toBeCloseTo(0.40);
   });
 
-  it('chute le plus vite autour de l’âge médian (forme en S)', () => {
-    const drop = (age: number) => conditionAtAge(age) - conditionAtAge(age + 1);
-    expect(drop(DEGRADATION.midAge)).toBeGreaterThan(drop(5));
-    expect(drop(DEGRADATION.midAge)).toBeGreaterThan(drop(110));
+  it('ralentit à 0,005 par an après 70 ans et ne passe pas sous 0', () => {
+    expect(conditionAtAge(71)).toBeCloseTo(0.395);
+    expect(conditionAtAge(100)).toBeCloseTo(0.25);
+    expect(conditionAtAge(150)).toBeCloseTo(0);
+    expect(conditionAtAge(300)).toBe(0);
+    const values = Array.from({ length: 160 }, (_, age) => conditionAtAge(age));
+    values.slice(1).forEach((v, i) => expect(v).toBeLessThanOrEqual(values[i]!));
   });
 
-  it('plafonne l’âge effectif et retire du vieillissement après travaux', () => {
-    expect(effectiveAge(1850, null)).toBe(DEGRADATION.maxEffectiveAge);
+  it('part de la construction ou des derniers travaux, le plus récent des deux', () => {
     expect(effectiveAge(BASE_YEAR - 30, null)).toBe(30);
-    expect(effectiveAge(BASE_YEAR - 30, 2020)).toBe(30 - DEGRADATION.workRecovery);
-    expect(effectiveAge(BASE_YEAR - 5, 2024)).toBe(0);
+    expect(effectiveAge(BASE_YEAR - 30, 2020)).toBe(BASE_YEAR - 2020);
+    expect(effectiveAge(BASE_YEAR - 5, 2000)).toBe(5);
+    expect(effectiveAge(1850, null)).toBe(BASE_YEAR - 1850);
   });
 
-  it('projette l’état sur la courbe depuis l’âge effectif', () => {
+  it('projette l’état depuis l’âge effectif', () => {
     const modelled = withConditionModel({ ...building, constructionYear: BASE_YEAR - 40, lastWorkYear: null });
-    expect(modelled.condition).toBeCloseTo(conditionAtAge(40), 10);
-    expect(conditionAt(modelled, BASE_YEAR + 10)).toBeCloseTo(conditionAtAge(50), 10);
-    expect(modelled.annualDecay).toBeCloseTo(conditionAtAge(40) - conditionAtAge(41), 10);
+    expect(modelled.condition).toBeCloseTo(0.70);
+    expect(conditionAt(modelled, BASE_YEAR + 10)).toBeCloseTo(0.60);
+    expect(modelled.annualDecay).toBeCloseTo(0.01);
+    const recent = withConditionModel({ ...building, constructionYear: 1900, lastWorkYear: BASE_YEAR - 8 });
+    expect(recent.condition).toBe(1);
   });
 });

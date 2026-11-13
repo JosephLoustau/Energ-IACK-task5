@@ -96,6 +96,8 @@ const buildings = rows.map(({ f, p, district, street, use, heating, year, yearEs
     area: Math.round(p.sre),
     constructionYear,
     lastWorkYear,
+    rentResidential: Number.isFinite(p.rent_residential) ? Math.round(p.rent_residential) : null,
+    solarShare: Number.isFinite(p.solar_share_above_1000) ? round(p.solar_share_above_1000, 3) : null,
     height: Number.isFinite(p.height) ? round(p.height, 1) : null,
     idc: Math.round(idc),
     carbonIntensity: round(carbon, 1),

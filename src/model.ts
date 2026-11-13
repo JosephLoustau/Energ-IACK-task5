@@ -1,3 +1,5 @@
+import { planRenovation } from './renovation';
+
 export const BASE_YEAR = 2026;
 export const MAX_HORIZON = 10;
 
@@ -21,12 +23,16 @@ export interface Building {
   condition: number;
   /** Perte d'état sur l'année suivant BASE_YEAR (pente courante de la courbe). */
   annualDecay: number;
-  /** Âge effectif en BASE_YEAR ; si présent, l'état suit la courbe en S (sinon décroissance linéaire). */
+  /** Âge depuis construction ou derniers travaux en BASE_YEAR ; si présent, l'état suit la courbe par morceaux (sinon décroissance linéaire). */
   effectiveAge?: number;
   /** Année des derniers travaux énergétiques connus (permis SITG), ou null. */
   lastWorkYear?: number | null;
   /** Hauteur du bâtiment (m, SITG), pour la carte 3D. */
   height?: number | null;
+  /** Loyers résidentiels nets annuels (CHF/an, SITG/QuantHome), ou null si non renseignés. */
+  rentResidential?: number | null;
+  /** Part de toiture au-dessus de 1000 kWh/m²·an (OCEN), ou null. */
+  solarShare?: number | null;
   idc: number;
   carbonIntensity: number;
   heating: Heating;
@@ -96,14 +102,6 @@ export const CRITERIA: Record<Criterion, string> = {
   carbon: 'CO₂ hors seuil',
 };
 
-export const RENOVATION = {
-  fixedCostPerM2: 550,
-  conditionCostPerM2: 900,
-  heatReduction: 0.45,
-  targetCondition: 0.92,
-  lowCarbonFactor: 0.035,
-};
-
 function assertThresholds(thresholds: Thresholds) {
   if (!Number.isFinite(thresholds.idc) || thresholds.idc <= 0
     || !Number.isFinite(thresholds.carbon) || thresholds.carbon <= 0
@@ -133,27 +131,30 @@ export function thresholdsAt(strategy: Strategy, year: number): Thresholds {
 }
 
 /**
- * Modèle d'état (indice Stratus non disponible) : courbe logistique en S de l'âge effectif.
- * L'état reste élevé les premières décennies, chute autour de `midAge`, puis tend vers `floor`.
- * Hypothèses de l'équipe, à calibrer.
+ * Modèle d'état (indice Stratus non disponible), linéaire par morceaux selon l'âge depuis la
+ * construction ou les derniers travaux énergétiques :
+ *  - 1 pendant les `graceYears` premières années ;
+ *  - puis −`rate` par an, jusqu'à 0,40 à `kneeAge` ans ;
+ *  - au-delà, −`slowRate` par an (plancher 0).
  */
 export const DEGRADATION = {
-  midAge: 60,           // ans : âge effectif où l'état est à mi-chemin entre 1 et floor
-  steepness: 0.07,      // 1/an : raideur de la chute
-  floor: 0.1,           // état minimal atteint
-  maxEffectiveAge: 60,  // ans : entretien courant, aucun bâtiment n'est « plus vieux » que cela
-  workRecovery: 15,     // ans d'âge effectif retirés par des travaux énergétiques récents (permis)
+  graceYears: 10,
+  rate: 0.01,
+  kneeAge: 70,
+  slowRate: 0.005,
 };
 
 export function conditionAtAge(age: number, p = DEGRADATION) {
   const a = Math.max(0, age);
-  const norm = 1 + Math.exp(-p.steepness * p.midAge); // garantit état = 1 à l'âge 0
-  return p.floor + (1 - p.floor) * norm / (1 + Math.exp(p.steepness * (a - p.midAge)));
+  if (a <= p.graceYears) return 1;
+  const kneeValue = 1 - p.rate * (p.kneeAge - p.graceYears);
+  if (a <= p.kneeAge) return 1 - p.rate * (a - p.graceYears);
+  return Math.max(0, kneeValue - p.slowRate * (a - p.kneeAge));
 }
 
-export function effectiveAge(constructionYear: number, lastWorkYear: number | null | undefined, p = DEGRADATION) {
-  const age = Math.min(Math.max(0, BASE_YEAR - constructionYear), p.maxEffectiveAge);
-  return lastWorkYear ? Math.max(0, age - p.workRecovery) : age;
+/** Âge depuis la dernière construction ou rénovation énergétique connue. */
+export function effectiveAge(constructionYear: number, lastWorkYear: number | null | undefined) {
+  return Math.max(0, BASE_YEAR - Math.max(constructionYear, lastWorkYear ?? -Infinity));
 }
 
 export function conditionAt(building: Building, year: number) {
@@ -201,17 +202,17 @@ export function assessBuilding(building: Building, strategy: Strategy): Assessme
 }
 
 export function renovationFor(building: Building, year: number) {
+  const plan = planRenovation(building);
   const conditionBefore = conditionAt(building, year);
-  const idcAfter = building.idc * (1 - RENOVATION.heatReduction);
-  const carbonAfter = Math.min(building.carbonIntensity, idcAfter / 3.6 * RENOVATION.lowCarbonFactor);
-  const conditionAfter = Math.max(conditionBefore, RENOVATION.targetCondition);
   return {
-    cost: building.area * (RENOVATION.fixedCostPerM2 + (1 - conditionBefore) * RENOVATION.conditionCostPerM2),
-    idcAfter,
-    carbonAfter,
+    plan,
+    cost: plan.capex,
+    idcAfter: plan.after.idc,
+    carbonAfter: plan.after.carbon,
     conditionBefore,
-    conditionAfter,
-    carbonSaved: (building.carbonIntensity - carbonAfter) * building.area / 1000,
+    // Un bâtiment rénové repart à 1 (travaux < 10 ans).
+    conditionAfter: 1,
+    carbonSaved: (building.carbonIntensity - plan.after.carbon) * building.area / 1000,
   };
 }
 
