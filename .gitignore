@@ -224,3 +224,7 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 .DS_Store
+
+# local only
+context.md
+data/
