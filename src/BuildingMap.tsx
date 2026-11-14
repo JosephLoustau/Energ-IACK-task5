@@ -240,6 +240,9 @@ export default function BuildingMap({ buildings, assessments, selected, active, 
     const map = new maplibregl.Map({
       container: container.current!, style: BASEMAP_STYLE, bounds,
       fitBoundsOptions: { padding: 50 }, maxPitch: 70, dragRotate: false, attributionControl: { compact: true },
+      // L'inclinaison suit le zoom à chaque image, quel que soit le mouvement (molette, boutons +/−, animation).
+      // Un setPitch pendant le zoom l'interromprait : au-delà de Z_FLAT, la carte ne zoomait presque plus.
+      transformCameraUpdate: ({ zoom }) => (is3dRef.current && zoom !== undefined ? { pitch: pitchForZoom(zoom) } : {}),
     });
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
@@ -339,27 +342,6 @@ export default function BuildingMap({ buildings, assessments, selected, active, 
     map.setPaintProperty('selected-halo', 'circle-stroke-opacity', fadeOut(1, is3d));
     map.easeTo({ pitch: is3d ? pitchForZoom(map.getZoom()) : 0, duration: 600 });
   }, [is3d, ready]);
-
-  // L'inclinaison suit le zoom (sans interrompre une animation de caméra en cours).
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !ready) return;
-    // Uniquement pendant un zoom piloté par l'utilisateur (molette, pincement) : une animation
-    // (boutons, recentrage) serait interrompue par setPitch ; `settle` la rattrape à la fin.
-    const follow = (event: { originalEvent?: unknown }) => {
-      if (!is3dRef.current || !event.originalEvent) return;
-      const target = pitchForZoom(map.getZoom());
-      if (Math.abs(map.getPitch() - target) >= 0.5) map.setPitch(target);
-    };
-    const settle = () => {
-      if (!is3dRef.current) return;
-      const target = pitchForZoom(map.getZoom());
-      if (Math.abs(map.getPitch() - target) >= 0.5) map.easeTo({ pitch: target, duration: 300 });
-    };
-    map.on('zoom', follow);
-    map.on('moveend', settle);
-    return () => { map.off('zoom', follow); map.off('moveend', settle); };
-  }, [ready]);
 
   return <div className="map-wrap">
     <div ref={container} className="building-map" aria-label="Carte des bâtiments de la Ville de Genève" />
