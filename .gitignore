@@ -240,3 +240,6 @@ public/data/
 **/buildings.generated.json
 
 .vite/
+
+# Vidéos de démonstration générées
+videos/
