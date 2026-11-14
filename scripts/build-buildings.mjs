@@ -1,10 +1,14 @@
-// Convertit ville_geneve_core.geojson (SITG + QuantHome) en un JSON compact
-// consommé par l'application : src/buildings.generated.json
-// Usage : npm run data [-- chemin/vers/fichier.geojson]
-import { readFileSync, writeFileSync } from 'node:fs';
+// Convertit data/ville_geneve_core.geojson (produit par pipeline/stock.py, SITG + QuantHome)
+// en un JSON compact consommé par l'application : src/buildings.generated.json
+// Usage : npm run data:build [-- chemin/vers/fichier.geojson]
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const input = process.argv[2] ?? fileURLToPath(new URL('../ville_geneve_core.geojson', import.meta.url));
+const input = process.argv[2] ?? fileURLToPath(new URL('../data/ville_geneve_core.geojson', import.meta.url));
+if (!existsSync(input)) {
+  console.error(`GeoJSON introuvable : ${input}\nLancez d'abord « npm run data:fetch » (nécessite un .env, voir README).`);
+  process.exit(1);
+}
 const output = fileURLToPath(new URL('../src/buildings.generated.json', import.meta.url));
 const geo = JSON.parse(readFileSync(input, 'utf8'));
 

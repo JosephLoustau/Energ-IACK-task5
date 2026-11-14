@@ -17,6 +17,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/).
 - Fiche bâtiment : protection patrimoniale, statut IDC (OCEN), sources et valeurs estimées.
 
 ### Modifié
+- Données : plus aucune donnée versionnée. Le pipeline Python (`pipeline/`, ex-branche `data-sourcing`) génère `data/ville_geneve_core.geojson` à partir des identifiants du `.env` (voir `.env.example`), puis `npm run data` produit `src/buildings.generated.json`. `npm run dev` et `npm run build` s'arrêtent avec un message explicite si les données manquent.
 - Application renommée « StratoRéno », y compris titre de page, en-tête, pied de page et préfixe des exports.
 - Scénarios renommés « Base légale », « Exemplaire » et « Modulable », y compris dans la visite et les exports.
 - Repères S1/S2 et valeurs de référence sur les trois plages du scénario modulable ; seuils séparés en blocs.
