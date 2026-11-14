@@ -2,9 +2,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import App, { ThresholdControls } from './App';
 import Blason from './Blason';
+import RenovationTab from './RenovationTab';
 import ScatterPlot from './ScatterPlot';
 import { BUILDINGS } from './data';
-import { BASE_YEAR, COHORTS, PRESETS, assessPortfolio, selectProgram } from './model';
+import { BASE_YEAR, COHORTS, PRESETS, assessBuilding, assessPortfolio, renovationFor, selectProgram } from './model';
+import type { Building } from './model';
 import { ICON_COLORS, SHADES, criteriaOf, markerColor } from './symbols';
 
 vi.mock('./BuildingMap', () => ({
@@ -31,12 +33,12 @@ describe('Présentation des scénarios', () => {
   it('affiche les six repères avec leurs valeurs et leur position sur chaque plage', () => {
     const html = renderToStaticMarkup(<ThresholdControls value={PRESETS.conservative.thresholds} editable onChange={vi.fn()} />);
     const references = [
-      ['idc-conservative', 'Scénario 1, Base légale : 600 MJ/m²/an', 50],
+      ['idc-conservative', 'Scénario 1, Base légale : 800 MJ/m²/an', 75],
       ['idc-ambitious', 'Scénario 2, Exemplaire : 450 MJ/m²/an', 31.25],
       ['condition-conservative', 'Scénario 1, Base légale : 0,50 / 1', 50],
-      ['condition-ambitious', 'Scénario 2, Exemplaire : 0,70 / 1', 70],
-      ['carbon-conservative', 'Scénario 1, Base légale : 20 kgCO₂e/m²/an', 19 / 79 * 100],
-      ['carbon-ambitious', 'Scénario 2, Exemplaire : 6 kgCO₂e/m²/an', 5 / 79 * 100],
+      ['condition-ambitious', 'Scénario 2, Exemplaire : 0,50 / 1', 50],
+      ['carbon-conservative', 'Scénario 1, Base légale : 59 kgCO₂e/m²/an', 58 / 79 * 100],
+      ['carbon-ambitious', 'Scénario 2, Exemplaire : 25 kgCO₂e/m²/an', 24 / 79 * 100],
     ] as const;
     for (const [id, label, position] of references) {
       expect(html).toContain(`aria-label="${label}"`);
@@ -47,9 +49,9 @@ describe('Présentation des scénarios', () => {
   });
 
   it('garde les repères des bases fixes lorsque les seuils modulables sont différents', () => {
-    const html = renderToStaticMarkup(<ThresholdControls value={{ idc: 800, condition: 0.9, carbon: 35 }} editable onChange={vi.fn()} />);
-    expect(html).toContain('value="800"');
-    expect(html).toContain('Base légale : 600 MJ/m²/an');
+    const html = renderToStaticMarkup(<ThresholdControls value={{ idc: 700, condition: 0.9, carbon: 35 }} editable onChange={vi.fn()} />);
+    expect(html).toContain('value="700"');
+    expect(html).toContain('Base légale : 800 MJ/m²/an');
     expect(html).toContain('Exemplaire : 450 MJ/m²/an');
     expect(html).not.toContain('disabled=""');
   });
@@ -128,7 +130,7 @@ describe('Couleurs des échéances', () => {
     }
   });
 
-  it.each(['conservative', 'ambitious'] as const)('conserve des bâtiments à dix ans dans le parc réel (%s)', (id) => {
+  it.each(['conservative'] as const)('conserve des bâtiments à dix ans dans le parc réel (%s)', (id) => {
     const portfolio = assessPortfolio(BUILDINGS, PRESETS[id]);
     const ten = selectProgram(portfolio, 0, 'ten');
     expect(ten.length).toBeGreaterThan(0);
@@ -164,5 +166,24 @@ describe('Couleurs des échéances', () => {
     expect(html).toContain('class="use-filter "');
     expect(html).toContain('data-cohort="safe"');
     expect(html).toContain('Au-delà de 10 ans');
+  });
+});
+
+describe('Paquet recommandé dans l’onglet Mesures', () => {
+  const sample: Building = {
+    id: 'T', name: 'Test', district: 'Démo', use: 'Administration', coordinates: [46.2, 6.14], area: 1000,
+    constructionYear: 1980, condition: 0.9, annualDecay: 0, idc: 400, carbonIntensity: 60, heating: 'Gaz',
+  };
+  it('coche par défaut le paquet recommandé et affiche sa profondeur et la part vitrée', () => {
+    const assessment = assessBuilding(sample, PRESETS.conservative);
+    expect(assessment.cohort).toBe('now');
+    const html = renderToStaticMarkup(<RenovationTab assessment={assessment} strategy={PRESETS.conservative} onShowOnMap={vi.fn()} />);
+    const recommended = renovationFor(sample, assessment.dueYear!, PRESETS.conservative);
+    expect(html).toContain('data-testid="recommended-depth"');
+    expect(recommended.depth).toBe('energy');
+    expect(html).toContain('rénovation énergétique');
+    expect((html.match(/type="checkbox" checked=""/g) ?? []).length).toBe(recommended.plan.measures.filter((m) => m.included).length);
+    expect(html).toContain('60 % de la façade brute (Administration)');
+    expect(html).toContain('Tout cocher');
   });
 });

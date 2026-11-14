@@ -4,6 +4,11 @@ node_modules/
 !.env.example
 playwright-report/
 test-results/
+node_modules/
+.env.*
+!.env.example
+playwright-report/
+test-results/
 __pycache__/
 *.py[codz]
 *$py.class
@@ -231,4 +236,5 @@ context.md
 # Données générées localement (jamais commitées)
 data/
 *.geojson
+public/data/
 src/buildings.generated.json

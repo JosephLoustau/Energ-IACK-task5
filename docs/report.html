@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HTML report: how it works</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1d2329;--muted:#5c6670;--line:#dfe3e6;--accent:#2f6f5e;--soft:#eef4f1;--box:#fff}
+@media (prefers-color-scheme:dark){:root{--bg:#14181b;--fg:#e3e7ea;--muted:#9aa4ad;--line:#2b3338;--accent:#6cc3a8;--soft:#1c2a26;--box:#1b2125;color-scheme:dark}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:960px;margin:0 auto;padding:40px 16px 64px}
+h1{font-size:28px;margin:0 0 6px} h2{font-size:18px;margin:36px 0 10px} h3{font-size:15px;margin:22px 0 6px}
+.sub{color:var(--muted);margin:0 0 24px} p{max-width:72ch}
+table{border-collapse:collapse;width:100%;font-size:14px}
+.tbl{overflow-x:auto}
+th,td{text-align:left;vertical-align:top;padding:7px 10px;border-bottom:1px solid var(--line)}
+thead th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+tbody th{color:var(--accent);font-weight:600;white-space:nowrap}
+code{font:13px ui-monospace,Menlo,monospace}
+a{color:var(--accent)}
+ul,ol{padding-left:20px} li{margin:4px 0;max-width:72ch}
+pre{background:var(--soft);border-radius:6px;padding:12px 14px;overflow-x:auto;font:13px/1.5 ui-monospace,Menlo,monospace}
+.model{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.model div{background:var(--soft);border-radius:6px;padding:10px 12px}
+.model b{display:block;font-family:ui-monospace,Menlo,monospace;font-size:13px;margin-bottom:2px}
+.note{border-left:3px solid var(--accent);background:var(--soft);padding:10px 14px;border-radius:0 6px 6px 0;max-width:72ch}
+.flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:6px;margin:8px 0}
+.flow div{flex:1 1 150px;background:var(--box);border:1px solid var(--line);border-radius:6px;padding:10px 12px;font-size:13px}
+.flow div b{display:block;font-size:14px;margin-bottom:2px}
+.flow div code{font-size:12px;color:var(--muted)}
+.flow .arrow{flex:0 0 auto;border:0;background:none;padding:0;display:flex;align-items:center;color:var(--muted);font-size:18px}
+.toc{columns:2;column-gap:32px;padding-left:20px;max-width:none}
+@media (max-width:640px){.toc{columns:1}.flow .arrow{transform:rotate(90deg);flex-basis:100%;justify-content:center}}
+footer{color:var(--muted);font-size:13px;margin-top:32px}
+</style></head><body><main>
+<h1>The HTML report: how it works</h1>
+<p class="sub">What the exported roadmap contains, how its numbers are computed, and where to change it. Status at 13 November 2026, branch <code>data-sourcing</code>.</p>
+
+<ol class="toc">
+  <li><a href="#overview">Overview</a></li>
+  <li><a href="#files">Files</a></li>
+  <li><a href="#flow">From click to page</a></li>
+  <li><a href="#model">How the numbers are computed</a></li>
+  <li><a href="#contents">What the report shows</a></li>
+  <li><a href="#reader">What the reader can do</a></li>
+  <li><a href="#change">How to change things</a></li>
+  <li><a href="#gotchas">Constraints and pitfalls</a></li>
+  <li><a href="#tests">Tests</a></li>
+  <li><a href="#limits">Known limits</a></li>
+</ol>
+
+<h2 id="overview">1. Overview</h2>
+<p>The <b>Rapport HTML</b> button in the app's top bar builds a single, self-contained HTML file and opens it in a new tab. The file holds its own data, styles and script, so it works fully offline. Only the generation needs a connection: <code>basemap.ts</code> downloads swisstopo grey tiles (<code>swisstlm3d-karte-grau</code>), stitches them into one faded JPEG and embeds it. If that fails (offline, 8 s timeout), the maps draw without a basemap. It is laid out like an A4 document and prints to PDF cleanly.</p>
+<p>The report covers the strategy selected in the app and the buildings that pass the app's filters (usage, search). Inside the report the reader can still change three levers (thermostat, annual budget, social cost of carbon), rewrite the text, and download the result.</p>
+
+<h2 id="files">2. Files</h2>
+<div class="tbl"><table>
+<thead><tr><th>File</th><th>Role</th></tr></thead>
+<tbody>
+<tr><th><a href="../src/report/plan.ts">plan.ts</a></th><td>Computation, in TypeScript and tested. <code>PLANNING</code> holds the planning hypotheses; <code>RoadmapPlanner</code> schedules works under a budget; <code>ScenarioPlan</code> builds yearly series; <code>StrategyComparison</code> runs every strategy × thermostat × budget combination.</td></tr>
+<tr><th><a href="../src/report/HtmlReport.ts">HtmlReport.ts</a></th><td>Turns the comparison into a compact JSON payload and assembles the HTML (CSS + data + runtime). <code>open()</code> shows it in a new tab.</td></tr>
+<tr><th><a href="../src/report/runtime.js">runtime.js</a></th><td>Plain JavaScript that runs inside the report: draws the pages, charts and map, handles the toolbar, text editing, sorting, CSV and HTML downloads. Imported as a raw string (<code>?raw</code>).</td></tr>
+<tr><th><a href="../src/report/report.css">report.css</a></th><td>Page layout (A4), toolbar, charts, tables, print rules. Colours are CSS variables at the top.</td></tr>
+<tr><th><a href="../src/report/texts.ts">texts.ts</a></th><td><b>All default wording</b> of the report, with <code>{placeholders}</code>.</td></tr>
+<tr><th><a href="../src/report/plan.test.ts">plan.test.ts</a>, <a href="../src/report/texts.test.ts">texts.test.ts</a></th><td>Tests for the scheduler, the series, the thermostat lever, HTML escaping and text keys.</td></tr>
+<tr><th><a href="../src/App.tsx">App.tsx</a></th><td><code>exportReport()</code> collects the filtered buildings and the strategies (both presets, plus the custom one when it is selected) and calls <code>new HtmlReport(…).open()</code>.</td></tr>
+</tbody></table></div>
+<p>The building model itself (thresholds, condition curve, generic renovation) is in <a href="../src/model.ts">model.ts</a> and shared with the app; the map symbols come from <a href="../src/symbols.ts">symbols.ts</a>.</p>
+
+<h2 id="flow">3. From click to page</h2>
+<div class="flow">
+  <div><b>App</b>filtered buildings, strategies, scope label<br><code>App.tsx</code></div>
+  <div class="arrow">→</div>
+  <div><b>Compute</b>every strategy × thermostat × budget is assessed and scheduled<br><code>StrategyComparison</code></div>
+  <div class="arrow">→</div>
+  <div><b>Serialise</b>payload JSON + texts + CSS + runtime in one file<br><code>HtmlReport.render()</code></div>
+  <div class="arrow">→</div>
+  <div><b>Render</b>new tab; the runtime draws the pages from the payload<br><code>runtime.js</code></div>
+</div>
+<p>All heavy work happens once, in the app. With 2 strategies, 3 thermostat levels and 6 budgets, that is 36 scheduled plans (54 with a custom strategy). The report only looks them up when the reader switches a lever, so switching is instant. The one value computed live is the social cost of carbon, because it is a free number: it only multiplies tonnes already in the payload.</p>
+<p>The payload stores the buildings once, then for each strategy and thermostat level: the due year and triggered criteria of each building, and for each budget the scheduled works (<code>[building index, works year, cost, tCO₂e/yr saved, residual flag]</code>) and the yearly series. The file weighs about 880 KB for the full stock.</p>
+
+<h2 id="model">4. How the numbers are computed</h2>
+<div class="model">
+  <div><b>1 · Thermostat</b>A reduction of n °C multiplies every building's IDC and CO₂ by (1 − 6 % × n) from 2026, before anything else. Fewer buildings then cross a threshold.</div>
+  <div><b>2 · Assessment</b>Unchanged from the app (<code>assessPortfolio</code>): first year between 2026 and 2036 when one criterion (IDC, condition, CO₂) crosses its threshold, then priority order.</div>
+  <div><b>3 · Scheduling</b>Buildings in priority order, each in the first year ≥ max(due year, 2028) where the annual budget still has room. Its cost is computed at that year, so a delayed building costs more. A building above the cap takes a year alone.</div>
+  <div><b>4 · Series</b>Yearly investment and count; emissions = stock emissions minus the savings of works completed the year before. Cumulative emissions sum 2026–2050.</div>
+  <div><b>5 · Carbon cost</b>Full cost = investment + CSC × cumulative emissions 2026–2050, undiscounted. Per building, "net CSC" = cost − CSC × tonnes saved until 2050.</div>
+  <div><b>6 · Levers</b>Change one input at a time against the chosen scenario, then search all combinations for the lowest full cost and the lowest emissions.</div>
+</div>
+<h3>Planning hypotheses</h3>
+<p>They sit in <code>PLANNING</code> in <a href="../src/report/plan.ts">plan.ts</a>:</p>
+<pre>firstWorksYear: 2028        // one year of studies + one year of tender after 2026
+horizonYear:    2050        // end of the trajectory (climate-neutrality target)
+budgetLevels:   [40, 60, 80, 120, 200 MCHF/yr, no cap]
+defaultBudget:  80 MCHF/yr
+comfortLevels:  [0, 1, 2]   // °C of thermostat reduction
+savingPerDegree: 0.06       // heat demand saved per °C
+defaultScc:     177         // CHF/tCO₂e</pre>
+<p class="note">These are team hypotheses, not validated values. The 6 %/°C rule of thumb and the 2028 start in particular should be checked with the City before the report is shared outside the team.</p>
+
+<h2 id="contents">5. What the report shows</h2>
+<div class="tbl"><table>
+<thead><tr><th>Page</th><th>Content</th></tr></thead>
+<tbody>
+<tr><th>1 · Synthèse</th><td>Title, scenario line, four key figures (investment, full cost with CSC, emissions cut, end of works), a four-sentence summary, and Figure 1: map of the situation in 2026 with the app's colours (period of first threshold crossed, shade = number of criteria), shapes (usage) and sizes (heated area).</td></tr>
+<tr><th>2–3 · Feuille de route</th><td>Figure 2: map of the planned works year. A "pace" panel (backlog, year when half and all of the CO₂ gain is reached). Figure 3: yearly investment against the budget cap. Figure 4: calendar of yearly batches (studies → tender → works → gains).</td></tr>
+<tr><th>4 · Comparaison</th><td>Figure 5: emissions trajectory of each strategy against "no action" (and "thermostat only" when lowered). Scenario table with and without CSC. "Cost of caution" panel. Lever table (other strategy, other thermostat, higher budget, no cap) and the best of all combinations.</td></tr>
+<tr><th>Annexe A</th><td>Building list, collapsed by default (one-line summary + CSV export). Once shown: sortable, filterable, with due year, works year, cost, net CSC and CO₂ saved.</td></tr>
+<tr><th>Annexe B</th><td>The inputs used for this report (scope, thresholds, thermostat, budget, CSC), then the method and its limits.</td></tr>
+</tbody></table></div>
+
+<h2 id="reader">6. What the reader can do</h2>
+<ul>
+  <li><b>Thermostat</b> (0, −1, −2 °C), <b>Budget</b> (40 to 200 MCHF/yr or no cap) and <b>CSC</b> (free number, default 177 CHF/t) in the toolbar. The "?" next to Thermostat and CSC explains each lever.</li>
+  <li><b>✎ Modifier le texte</b>: titles, key sentences, summary and takeaway panels become editable. Edits survive lever changes, are marked by a yellow bar in the margin, and can be reset with <b>Rétablir</b>.</li>
+  <li><b>Télécharger</b>: saves the report as an HTML file, including the text edits (stored in a <code>report-texts</code> JSON block and reloaded on opening).</li>
+  <li><b>Export CSV</b> (Annexe A): the building list for the current scenario, with the parameters in the first row.</li>
+  <li><b>Print → PDF</b>: the toolbar and buttons are hidden, each page breaks on A4.</li>
+</ul>
+<p class="note">An edited sentence is frozen: if the reader edits the summary and then changes the budget, the figures in that sentence no longer match. Edit last, or reset.</p>
+
+<h2 id="change">7. How to change things</h2>
+<h3>The wording</h3>
+<p>Edit <a href="../src/report/texts.ts">texts.ts</a>. Each key is one sentence or label; the comment above it lists its placeholders, e.g.</p>
+<pre>// {count} {firstYear} {end} {budget}
+s2Claim: '{count} bâtiments rénovés de {firstYear} à {end}, par lots annuels de {budget} au plus.',</pre>
+<ul>
+  <li>Placeholders receive values that are already formatted (numbers with Swiss separators, MCHF, years). An unknown placeholder renders as empty.</li>
+  <li>Light HTML is allowed (<code>&lt;b&gt;</code>, <code>&lt;br&gt;</code>, <code>&lt;p&gt;</code>).</li>
+  <li>Keys ending in a clause (<code>summaryThermostat</code>, <code>summaryResidual</code>, <code>s3BestCo2</code>…) are optional fragments added only when they apply; they start with a space.</li>
+  <li>Annexe B's method is the <code>hypotheses</code> list.</li>
+  <li><code>HtmlReport</code> also accepts <code>texts</code> in its options to override keys per export, e.g. for another language or another city.</li>
+</ul>
+<p>Chart, table and legend labels are not in <code>texts.ts</code>; they are in <code>runtime.js</code>.</p>
+
+<h3>A new sentence or block</h3>
+<ol>
+  <li>Add the key to <code>texts.ts</code>.</li>
+  <li>Use it in <code>runtime.js</code> with <code>T('myKey', { value: … })</code>.</li>
+  <li>To make it editable by the reader, wrap it: <code>ed('my-id', T('myKey'))</code>, or use <code>band('my-id', text, note)</code> for a takeaway panel. Ids must be unique and stable, since saved edits are keyed on them.</li>
+</ol>
+<p>The page helpers in <code>runtime.js</code> are <code>page()</code> (an A4 sheet with footer and number), <code>head()</code> (eyebrow, title, key sentence, side note), <code>figure()</code> (chart + legend + "Figure n —" caption + source) and <code>band()</code> (takeaway panel).</p>
+
+<h3>The hypotheses, levels and defaults</h3>
+<p>Change <code>PLANNING</code> in <code>plan.ts</code>. Adding a budget or thermostat level adds plans to the payload, so the file grows roughly in proportion. The renovation costs and thresholds are in <code>model.ts</code> (<code>RENOVATION</code>, <code>PRESETS</code>) and also change the app.</p>
+
+<h3>The look</h3>
+<p>The report follows the app's graphical chart (<code>src/styles.css</code>): Helvetica Neue, warm greys, Geneva yellow, and one colour per scenario (<code>--scenario-color</code>, set from <code>data-strategy</code> on <code>body</code>). That colour marks the KPI card borders, the takeaway panels, the active controls and the works-year ramp. The chart series <code>--s1..--s3</code> are the app's scenario colours, with <code>--s1</code> lightened (<code>#e8646f</code>) so red and green stay apart for colour-blind readers. If the app's colours change, update the variables at the top of <code>report.css</code>. Page size and margins are on <code>.page</code>.</p>
+
+<h2 id="gotchas">8. Constraints and pitfalls</h2>
+<ul>
+  <li><b>No <code>&lt;/script&gt;</code> in <code>runtime.js</code>.</b> The runtime is inlined in a script tag; that literal would end it early. Write <code>&lt;\/script&gt;</code> in strings.</li>
+  <li><b><code>runtime.js</code> is not type-checked.</b> It is plain JavaScript inside a string. Keep computation in <code>plan.ts</code> (typed and tested) and keep the runtime to lookups and drawing. Run <code>node --check src/report/runtime.js</code> after editing it.</li>
+  <li><b>The payload escapes <code>&lt;</code></b> so building names can never break out of the data block. Keep it that way if you add fields.</li>
+  <li><b>Size grows with combinations.</b> Strategies × thermostat levels × budgets plans are precomputed. Add levels with care.</li>
+  <li><b>Line endings.</b> Repository files are CRLF; keep new files in CRLF.</li>
+  <li><b>The report opens from a blob URL.</b> Browsers allow it because it follows a click; some popup blockers may still ask for permission.</li>
+</ul>
+
+<h2 id="tests">9. Tests</h2>
+<pre>npm test               # vitest: model + report
+npx tsc --noEmit       # types
+node --check src/report/runtime.js</pre>
+<ul>
+  <li>The scheduler starts no earlier than 2028, skips buildings with no threshold crossed, respects the budget, and prices delayed works at their year.</li>
+  <li>CO₂ gains start the year after works and are never counted twice; yearly investment adds up to the total.</li>
+  <li>A tighter budget never ends earlier nor emits less; a lower thermostat never adds works and lowers emissions.</li>
+  <li>The HTML is self-contained and building names cannot close the script tag.</li>
+  <li>Every text key used in the runtime exists in <code>texts.ts</code>.</li>
+</ul>
+
+<h2 id="limits">10. Known limits</h2>
+<ul>
+  <li>The renovation is one generic intervention; heat-pump or district-heating feasibility, heritage protection, subsidies and inflation are not modelled.</li>
+  <li>The full cost leaves out energy savings and emissions after 2050, which favours the cautious strategy. At 177 CHF/t the ambitious strategy only pays off for society above roughly 10 000 CHF/t.</li>
+  <li>Lowering the thermostat can reduce ambition: buildings that fall under the thresholds leave the programme and keep fossil heating, so 2050 emissions can end higher. The report flags it when it happens.</li>
+  <li>The scheduler is a greedy rule, not an optimisation; it keeps the app's priority order.</li>
+  <li>The maps have no background tiles, so the file stays self-contained; 1 % of outlying buildings on each side are left out of the frame and counted in the caption.</li>
+</ul>
+
+<footer>StratoRéno · Défi 5. See also <a href="data_model.html">data_model.html</a> for where the building data comes from.</footer>
+</main></body></html>

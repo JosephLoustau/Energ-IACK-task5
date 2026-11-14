@@ -1,16 +1,10 @@
-// Convertit data/ville_geneve_core.geojson (produit par pipeline/stock.py, SITG + QuantHome)
-// en un JSON compact consommé par l'application : src/buildings.generated.json
-// Usage : npm run data:build [-- chemin/vers/fichier.geojson]
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+// Convertit la collection de bâtiments produite par stock.py (GeoJSON SITG + QuantHome) en un JSON
+// compact consommé par l'application : src/buildings.generated.json (non versionné).
+// Appelé par scripts/build-data.mjs (npm run data) ; ou : node scripts/build-buildings.mjs fichier.geojson
+import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const input = process.argv[2] ?? fileURLToPath(new URL('../data/ville_geneve_core.geojson', import.meta.url));
-if (!existsSync(input)) {
-  console.error(`GeoJSON introuvable : ${input}\nLancez d'abord « npm run data:fetch » (nécessite un .env, voir README).`);
-  process.exit(1);
-}
-const output = fileURLToPath(new URL('../src/buildings.generated.json', import.meta.url));
-const geo = JSON.parse(readFileSync(input, 'utf8'));
+export const OUTPUT = fileURLToPath(new URL('../src/buildings.generated.json', import.meta.url));
 
 const USAGE = {
   'Education': 'Éducation', 'Residential': 'Logement', 'Mixed residential': 'Logement mixte',
@@ -38,7 +32,8 @@ function heatingOf(text) {
   return 'Inconnu';
 }
 const FOSSIL = new Set(['Gaz', 'Mazout', 'Gaz + mazout']);
-const EMISSION = { 'Gaz': 0.198, 'Mazout': 0.265, 'Gaz + mazout': 0.23, 'CAD': 0.07, 'Pompe à chaleur': 0.025, 'Bois / biogaz': 0.03, 'Électrique': 0.025 };
+// Agents énergétiques : MJ d'IDC par kWh d'énergie finale (OCEN) et facteur d'émission ; sources dans src/renovation.ts.
+const CARRIERS = JSON.parse(readFileSync(new URL('../src/carriers.json', import.meta.url), 'utf8'));
 
 function centroid(ring) {
   let x = 0, y = 0;
@@ -55,6 +50,7 @@ function yearOf(p) {
   return { year: null, estimated: true };
 }
 
+export function writeBuildings(geo, output = OUTPUT) {
 const rows = geo.features.map((f) => {
   const p = f.properties;
   const [district, ...street] = (p.address ?? '').split(',');
@@ -67,33 +63,29 @@ const rows = geo.features.map((f) => {
 });
 
 const medianYear = median(rows.map((r) => r.year));
-const idcByUse = {}, co2ByUse = {};
+const idcByUse = {};
 for (const use of new Set(rows.map((r) => r.use))) {
   const group = rows.filter((r) => r.use === use);
   idcByUse[use] = median(group.map((r) => r.p.idc));
-  co2ByUse[use] = median(group.map((r) => r.p.co2_scope1));
 }
 const idcGlobal = median(rows.map((r) => r.p.idc));
-const co2Global = median(rows.map((r) => r.p.co2_scope1));
 
 const NOW = 2026;
 const buildings = rows.map(({ f, p, district, street, use, heating, year, yearEstimated }) => {
   const imputed = [];
   let idc = p.idc;
   if (!Number.isFinite(idc)) { idc = idcByUse[use] || idcGlobal; imputed.push('idc'); }
-  let carbon = p.co2_scope1;
-  if (!Number.isFinite(carbon)) {
-    carbon = EMISSION[heating] !== undefined ? idc / 3.6 * EMISSION[heating] : (co2ByUse[use] || co2Global);
-    imputed.push('carbon');
-  }
+  // CO₂ scope 1 + 2, calculé pour tous les bâtiments : IDC / (MJ d'IDC par kWh) × facteur d'émission de l'agent
+  // (combustion directe pour le gaz et le mazout, facteur du réseau pour l'électricité et le CAD). Le champ QuantHome
+  // `co2_scope1` n'est plus utilisé : ses facteurs étaient incohérents (p. ex. 120 bâtiments au gaz avec le facteur du mazout).
+  const carrier = CARRIERS[heating] ?? CARRIERS['Inconnu'];
+  const carbon = idc / carrier.idcMjPerKwh * carrier.emission;
+  // CO₂ estimé seulement si ses données d'entrée ne sont pas réelles : IDC imputé ou chauffage inconnu.
+  if (imputed.includes('idc') || heating === 'Inconnu') imputed.push('carbon');
   const constructionYear = year ?? medianYear;
   if (year === null || yearEstimated) imputed.push('year');
-  // Proxy d'état (indice Stratus indisponible) : vieillissement + travaux énergétiques récents.
-  const age = Math.max(0, NOW - constructionYear);
-  let condition = 0.95 - Math.min(0.6, age * 0.0055);
-  const lastWork = p.last_energy_permit ? +p.last_energy_permit.slice(0, 4) : null;
-  if (lastWork && NOW - lastWork <= 15) condition += 0.12;
-  condition = round(Math.min(0.95, Math.max(0.25, condition)), 2);
+  // Indice d'état : calculé dans l'application (model.ts, courbe en S de l'âge effectif).
+  const lastWorkYear = p.last_energy_permit ? +p.last_energy_permit.slice(0, 4) : null;
   return {
     id: String(p.egid),
     name: street || `Bâtiment ${p.egid}`,
@@ -103,8 +95,10 @@ const buildings = rows.map(({ f, p, district, street, use, heating, year, yearEs
     coordinates: centroid(f.geometry.coordinates[0]).map((v) => round(v, 6)),
     area: Math.round(p.sre),
     constructionYear,
-    condition,
-    annualDecay: 0.015,
+    lastWorkYear,
+    rentResidential: Number.isFinite(p.rent_residential) ? Math.round(p.rent_residential) : null,
+    solarShare: Number.isFinite(p.solar_share_above_1000) ? round(p.solar_share_above_1000, 3) : null,
+    height: Number.isFinite(p.height) ? round(p.height, 1) : null,
     idc: Math.round(idc),
     carbonIntensity: round(carbon, 1),
     heating,
@@ -119,4 +113,8 @@ const buildings = rows.map(({ f, p, district, street, use, heating, year, yearEs
 writeFileSync(output, JSON.stringify(buildings));
 const count = (key) => buildings.filter((b) => b.imputed.includes(key)).length;
 console.log(`${buildings.length} bâtiments écrits dans ${output}`);
-console.log(`imputés — IDC: ${count('idc')}, CO₂: ${count('carbon')}, année: ${count('year')}`);
+console.log(`imputés — IDC: ${count('idc')}, CO₂ (IDC imputé ou chauffage inconnu): ${count('carbon')}, année: ${count('year')}`);
+console.log(`CO₂ scope 1 + 2 calculé pour ${buildings.length} bâtiments (IDC × facteur d'émission de l'agent, src/carriers.json)`);
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) writeBuildings(JSON.parse(readFileSync(process.argv[2], 'utf8')));

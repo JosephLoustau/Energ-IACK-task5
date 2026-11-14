@@ -1,3 +1,4 @@
+import { withConditionModel } from './model';
 import type { Building, BuildingUse, Heating } from './model';
 import realBuildings from './buildings.generated.json';
 
@@ -55,6 +56,7 @@ export function createDemoBuildings(): Building[] {
   });
 }
 
-/** Parc réel de la Ville de Genève, généré localement (non versionné) par `npm run data`. */
-export const BUILDINGS = realBuildings as unknown as Building[];
+/** Parc réel de la Ville de Genève (stock.py → npm run data). */
+export const BUILDINGS: Building[] = (realBuildings as unknown as Omit<Building, 'condition' | 'annualDecay'>[])
+  .map(withConditionModel);
 export const BUILDING_USES = [...new Set(BUILDINGS.map((b) => b.use))].sort((a, b) => a.localeCompare(b, 'fr'));

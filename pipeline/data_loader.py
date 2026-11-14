@@ -111,7 +111,8 @@ class SitgClient:
 
     def query(self, layer: str, where: str = "1=1", out_fields: str = "*", geometry: bool = True,
               page_size: int = 2000, max_rows: int | None = None, extra: dict | None = None) -> dict:
-        """GeoJSON FeatureCollection (WGS84). `extra`: e.g. a spatial filter.
+        """GeoJSON FeatureCollection (WGS84).
+        `extra`: filter parameters (e.g. a spatial filter), applied when selecting ids.
         Fetches matching OBJECTIDs first, then features by id batch (offset paging is unreliable on SITG)."""
         ids = sorted(self._post(layer, {"where": where, "returnIdsOnly": "true", "f": "json", **(extra or {})})
                      .get("objectIds") or [])[:max_rows]
@@ -152,15 +153,24 @@ class SitgClient:
 
 @dataclass
 class QBuildingsClient:
-    """EPFL QBuildings (Geneva) PostgreSQL. Rows are building blocks: `egid` lists several EGIDs joined by '/'."""
+    """EPFL QBuildings PostgreSQL, Geneva database (credentials `QBUILDINGS_*` in .env).
+    Geneva rows are building blocks: `egid` lists several EGIDs joined by '/'."""
     schema: str = "Processed"
+    env: str = "QBUILDINGS"
+    KEYS = ("HOST", "PORT", "DB", "USER", "PASSWORD")
+
+    @classmethod
+    def configured(cls, env: str = "QBUILDINGS") -> bool:
+        """True when all `<env>_*` credentials are set (in .env or the environment)."""
+        load_dotenv()
+        return all(os.environ.get(f"{env}_{k}") for k in cls.KEYS)
 
     def __post_init__(self):
         import psycopg
         load_dotenv()
-        e = os.environ
-        self.conn = psycopg.connect(host=e["QBUILDINGS_HOST"], port=e["QBUILDINGS_PORT"], dbname=e["QBUILDINGS_DB"],
-                                    user=e["QBUILDINGS_USER"], password=e["QBUILDINGS_PASSWORD"], connect_timeout=20)
+        e = {k: os.environ[f"{self.env}_{k}"] for k in self.KEYS}
+        self.conn = psycopg.connect(host=e["HOST"], port=e["PORT"], dbname=e["DB"], user=e["USER"],
+                                    password=e["PASSWORD"], connect_timeout=20)
 
     def blocks_for(self, egids: list[int], columns: list[str]) -> list[dict]:
         """One row per requested EGID found, with its block's columns plus `n_egids` in the block."""

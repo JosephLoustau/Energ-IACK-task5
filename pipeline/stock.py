@@ -46,6 +46,7 @@ class Category(StrEnum):
     ENERGY = "energy"
     VALUE = "value"
     CONSTRUCTION = "construction"
+    GEOMETRY_3D = "3d (optional)"
 
 
 @dataclass(frozen=True)
@@ -55,7 +56,7 @@ class AttributeSpec:
     category: Category
 
 
-B, E, V, C = Category.BASIC, Category.ENERGY, Category.VALUE, Category.CONSTRUCTION
+B, E, V, C, G = Category.BASIC, Category.ENERGY, Category.VALUE, Category.CONSTRUCTION, Category.GEOMETRY_3D
 ATTRIBUTES: dict[str, AttributeSpec] = {
     "owner": AttributeSpec("Owner", None, B),
     "address": AttributeSpec("Official address", None, B),
@@ -74,13 +75,22 @@ ATTRIBUTES: dict[str, AttributeSpec] = {
     "cad_in_street": AttributeSpec("District heating in street", None, E),
     "solar_profile": AttributeSpec("Roof irradiation profile", None, E),
     "solar_share_above_1000": AttributeSpec("Roof share > 1000 kWh/m²·yr", None, E),
+    "pv_area": AttributeSpec("PV potential, module area", "m2", E),
+    "pv_power": AttributeSpec("PV potential, peak power", "kWp", E),
+    "pv_yield": AttributeSpec("PV potential, yearly production", "kWh/y", E),
+    "pv_co2_avoided": AttributeSpec("PV potential, CO2 avoided", "kgCO2/y", E),
     "rent_residential": AttributeSpec("Residential net rent", "CHF/y", V),
     "rent_commercial": AttributeSpec("Commercial net rent", "CHF/y", V),
     "market_value": AttributeSpec("Market value", "CHF", V),
     "retrofit_cost_ratio": AttributeSpec("Retrofit cost / market value", None, V),
     "value_uplift": AttributeSpec("Value increase after renovation", None, V),
+    "pv_investment": AttributeSpec("PV investment", "CHF", V),
+    "pv_subsidy": AttributeSpec("PV subsidy", "CHF", V),
+    "pv_annual_gain": AttributeSpec("PV yearly gain", "CHF/y", V),
+    "pv_irr": AttributeSpec("PV internal rate of return", "%", V),
     "permits": AttributeSpec("Building permits", None, C),
     "last_energy_permit": AttributeSpec("Last energy-related permit", None, C),
+    "height": AttributeSpec("Height (ground to roof top)", "m", G),
 }
 
 
@@ -214,8 +224,9 @@ class CityStock:
                  "official_energy_intensity", "estimated_energy_intensity"]
     QB_COLUMNS = ["energy_heating_signature_kWh_y", "energy_hotwater_signature_kWh_y", "area_era_m2"]
 
-    def __init__(self, owner: str = "Ville de Genève", cache_dir: str = "data/cache", permits_since: int = 2010):
-        self.owner, self.permits_since = owner, permits_since
+    def __init__(self, owner: str = "Ville de Genève", cache_dir: str = "data/cache", permits_since: int = 2010,
+                 with_3d: bool = False):
+        self.owner, self.permits_since, self.with_3d = owner, permits_since, with_3d
         self.cache = Path(cache_dir)
         self.cache.mkdir(parents=True, exist_ok=True)
         self.sitg = SitgClient()
@@ -239,6 +250,21 @@ class CityStock:
         path.write_text(json.dumps(data, ensure_ascii=False))
         return data
 
+    def _cached_optional(self, name: str, fn, refresh: bool, env: str, default):
+        """Like `_cached` for QBuildings: skipped (default returned, nothing cached) when its
+        credentials are missing from .env or the database is unreachable."""
+        path = self.cache / f"{re.sub(r'\W+', '_', self.owner)}_{name}.json"
+        if path.exists() and not refresh:
+            return json.loads(path.read_text())
+        if not QBuildingsClient.configured(env):
+            print(f"[data] {env}_* credentials not in .env: skipping QBuildings ({name})")
+            return default
+        try:
+            return self._cached(name, fn, refresh=True)
+        except Exception as exc:  # unreachable DB, auth error…
+            print(f"[data] QBuildings unavailable ({type(exc).__name__}): skipping {name}")
+            return default
+
     # ------------------------------------------------------------------ build
     def build(self, refresh: bool = False) -> list[Building]:
         self._core(refresh)
@@ -246,6 +272,8 @@ class CityStock:
         self._enrich_permits(refresh)
         self._enrich_quanthome(refresh)
         self._enrich_qbuildings(refresh)
+        if self.with_3d:
+            self._enrich_3d(refresh)
         self._derive()
         return list(self.buildings.values())
 
@@ -343,6 +371,18 @@ class CityStock:
             b.fill("hot_water", pick("ECS"), D, src)
             b.set("cad_connected", any("CAD" in r["TYPE_INSTALLATION"] for r in rows), D, src,
                   "installation type = CAD heat exchanger")
+
+        pv = self._cached("pv", lambda: self.sitg.by_egid("OCEN_SOLAIRE_PV_BATIMENT", egids, geometry=False)["features"],
+                          refresh)
+        src, cm = "SITG OCEN_SOLAIRE_PV_BATIMENT", "cantonal PV model, economically sized installation"
+        for f in pv:
+            p = f["properties"]
+            if not (b := self.buildings.get(int(p["EGID"]))):
+                continue
+            for attr, k in (("pv_area", "M2_PV"), ("pv_power", "P_KWC"), ("pv_yield", "PV_AN_KWH"),
+                            ("pv_co2_avoided", "CO2"), ("pv_investment", "INVEST"), ("pv_subsidy", "SUB_AC"),
+                            ("pv_annual_gain", "GAINS_AN"), ("pv_irr", "TRI")):
+                b.fill(attr, round(p[k], 2) if isinstance(p[k], float) else p[k], E, src, f"{k}; {cm}")
 
         for layer, level in (("DPS_CLASSEMENT", "classé"), ("DPS_INVENTAIRE", "inventaire")):
             polys = self._cached(layer.lower(), lambda l=layer: self.sitg.query(l, out_fields="NOM")["features"], refresh)
@@ -459,7 +499,8 @@ class CityStock:
             self.log["qbuildings_skipped"] = 1
             return
         egids = list(self.buildings)
-        rows = self._cached("qbuildings", lambda: QBuildingsClient().blocks_for(egids, self.QB_COLUMNS), refresh)
+        rows = self._cached_optional("qbuildings", lambda: QBuildingsClient().blocks_for(egids, self.QB_COLUMNS),
+                                     refresh, "QBUILDINGS", [])
         for r in rows:
             h, w, era = (r[c] for c in self.QB_COLUMNS)
             if (b := self.buildings.get(r["egid"])) and h is not None and era:
@@ -467,6 +508,35 @@ class CityStock:
                        "QBuildings Processed.buildings",
                        f"(heating + hot-water signature) / ERA of block of {r['n_egids']} EGID(s), kWh→MJ "
                        "(median −11% vs measured)")
+
+    def _enrich_3d(self, refresh):
+        """Building height for the map extrusion (SITG 3D model, then cadastral fallbacks)."""
+        egids = list(self.buildings)
+        base = self._cached("bati3d_base", lambda: self.sitg.by_egid(
+            "CAD_BATI3D_BASE", egids, geometry=False, out_fields="EGID,ALTITUDE_REF")["features"], refresh)
+        roof = self._cached("bati3d_roof", lambda: self.sitg.by_egid(
+            "CAD_BATI3D_BASIC_TOIT", egids, geometry=False, out_fields="EGID,ALTITUDE_MAX")["features"], refresh)
+        ref = {int(f["properties"]["EGID"]): f["properties"]["ALTITUDE_REF"] for f in base}
+        top: dict[int, float] = {}
+        for f in roof:
+            e, z = int(f["properties"]["EGID"]), f["properties"]["ALTITUDE_MAX"]
+            top[e] = max(top.get(e, z), z)
+        D = Method.DECLARED
+        for egid, b in self.buildings.items():
+            if (z0 := ref.get(egid)) is not None and (z1 := top.get(egid)) is not None:
+                b.set("height", round(z1 - z0, 2), D, "SITG CAD_BATI3D_BASIC_TOIT",
+                      "ALTITUDE_MAX − ALTITUDE_REF of CAD_BATI3D_BASE")
+        # Height fallback: cadastral height > storeys × 2.8 m > one storey
+        cad = self._cached("heights_cad", lambda: self.sitg.by_egid(
+            "CAD_BATIMENT_HORSOL", egids, geometry=False, out_fields="EGID,HAUTEUR,NIVEAUX_HORSOL")["features"], refresh)
+        cad_by = {int(f["properties"]["EGID"]): f["properties"] for f in cad}
+        for egid, b in self.buildings.items():
+            p = cad_by.get(egid, {})
+            b.fill("height", p.get("HAUTEUR"), D, "SITG CAD_BATIMENT_HORSOL", "HAUTEUR (cadastral height)")
+            if p.get("NIVEAUX_HORSOL"):
+                b.fill("height", round(p["NIVEAUX_HORSOL"] * 2.8, 2), Method.ESTIMATED, "SITG CAD_BATIMENT_HORSOL",
+                       f"NIVEAUX_HORSOL ({p['NIVEAUX_HORSOL']}) × 2.8 m")
+            b.fill("height", 2.8, Method.ESTIMATED, "Computed", "default: one storey × 2.8 m")
 
     def _derive(self):
         """CO2 scope 1 fallback: IDC × direct emission factor of the main fuel."""
@@ -497,20 +567,54 @@ class CityStock:
             out[name] = c
         return out
 
-    def to_geojson(self, path: str) -> None:
+    def geojson(self) -> dict:
         feats = [{"type": "Feature", "geometry": b.geometry, "properties": b.to_record()}
                  for b in self.buildings.values()]
-        Path(path).write_text(json.dumps({"type": "FeatureCollection", "schema": self.schema(), "features": feats},
-                                         ensure_ascii=False))
+        return {"type": "FeatureCollection", "schema": self.schema(), "features": feats}
+
+    def to_geojson(self, path: str) -> None:
+        Path(path).write_text(json.dumps(self.geojson(), ensure_ascii=False))
+
+
+    def to_geojson_3d(self, path: str, precision: int = 6) -> None:
+        """Light layer for the map extrusion (MapLibre fill-extrusion): footprint + height."""
+        def rnd(c):
+            return [rnd(x) for x in c] if isinstance(c[0], list) else [round(x, precision) for x in c]
+        feats = [{"type": "Feature", "geometry": {"type": b.geometry["type"], "coordinates": rnd(b.geometry["coordinates"])},
+                  "properties": {"egid": b.egid, "height": b.value("height")}}
+                 for b in self.buildings.values() if b.value("height") is not None]
+        Path(path).write_text(json.dumps({"type": "FeatureCollection", "features": feats}, separators=(",", ":")))
+
+
+def main() -> None:
+    """Build the stock and write the app's data files. Run before the web app starts (npm predev/prebuild)."""
+    import argparse
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--out", default="public/data", help="output directory served by the web app")
+    ap.add_argument("--refresh", action="store_true", help="refetch all providers instead of using data/cache")
+    ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--core-stdout", action="store_true",
+                    help="write the building collection (GeoJSON) to stdout for scripts/build-data.mjs; logs go to stderr")
+    args = ap.parse_args()
+    stdout = sys.stdout
+    if args.core_stdout:
+        sys.stdout = sys.stderr
+    stock = CityStock(with_3d=True)
+    stock.build(refresh=args.refresh)
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    stock.to_geojson_3d(str(out / "ville_geneve_3d.geojson"))
+    print(f"[data] {len(stock.buildings)} buildings -> {out}/ville_geneve_3d.geojson")
+    if args.core_stdout:
+        json.dump(stock.geojson(), stdout, ensure_ascii=False)
+    if not args.quiet:
+        print(stock.log)
+        for cat in Category:
+            print(f"## {cat}")
+            for name, spec in ATTRIBUTES.items():
+                if spec.category == cat:
+                    print(f"  {name:24s} [{spec.unit or '-':12s}] {stock.coverage()[name]}")
 
 
 if __name__ == "__main__":
-    stock = CityStock()
-    stock.build()
-    print(stock.log)
-    for cat in Category:
-        print(f"## {cat}")
-        for name, spec in ATTRIBUTES.items():
-            if spec.category == cat:
-                print(f"  {name:24s} [{spec.unit or '-':12s}] {stock.coverage()[name]}")
-    stock.to_geojson("data/ville_geneve_core.geojson")
+    main()
