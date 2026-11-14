@@ -24,7 +24,7 @@ describe('Présentation des scénarios', () => {
     expect(html).toContain('Exemplaire');
     expect(html).toContain('Modulable');
     expect(html).toContain('DeCathlon Genève');
-    expect(html).toContain('decathlon-geneve-logo.png');
+    expect(html).toContain('decathlon-geneve-logo.svg');
     expect(html).toContain('10 ans pour renforcer');
     expect(html).not.toContain('énergi<span class="brand-emphasis">ACK');
     expect(html).not.toContain('Accélération décarbonation');

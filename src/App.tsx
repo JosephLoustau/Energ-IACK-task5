@@ -248,7 +248,7 @@ export default function App() {
 
   return <div className="app-shell" data-strategy={strategyId}>
     <header className="topbar">
-      <a className="brand" href="#main" aria-label="DeCathlon Genève — tableau de bord"><Blason /><img className="app-logo" src="/decathlon-geneve-logo.png" width="140" height="66" alt="DeCathlon Genève" /><span className="brand-slogan">10 ans pour renforcer<br />le parc bâti</span></a>
+      <a className="brand" href="#main" aria-label="DeCathlon Genève — tableau de bord"><Blason /><img className="app-logo" src="/decathlon-geneve-logo.svg" width="140" height="66" alt="DeCathlon Genève" /><span className="brand-slogan">10 ans pour renforcer<br />le parc bâti</span></a>
       <div className="topbar-right">
         <span className="topbar-count"><strong>{BUILDINGS.length}</strong> bâtiments de la Ville</span>
         <button className="help-button" onClick={() => setTourOpen(true)}><PlayCircle size={16} /> Visite guidée</button>
