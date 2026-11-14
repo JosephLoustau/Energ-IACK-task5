@@ -69,14 +69,23 @@ npm run preview
    scénario, comparent les deux références sans les modifier.
 4. Ajouter, par exemple, un seuil IDC de 450 en 2030 : **exemple de
    simulation seulement**, pas calendrier légal confirmé.
-5. Comparer les programmes cumulés en 2026, 2031 et 2036, puis cliquer sur
+5. Comparer les programmes cumulés en 2027, 2032 et 2037, puis cliquer sur
    une couleur pour isoler une catégorie.
 6. Cliquer sur un point ou une ligne pour lire les motifs, les coûts et les
-   gains supposés. Exporter la sélection en CSV.
+   gains supposés. Le bouton coloré **Exporter la stratégie**, sous les scénarios
+   et avant les curseurs, ouvre le rapport HTML pour l'ensemble du parc,
+   avec la stratégie active présélectionnée, indépendamment des filtres.
 
 Les filtres d'usage et de recherche s'appliquent à la carte, à la liste et
-aux KPI. Les bâtiments gris sont en surveillance et ne génèrent pas de
-travaux simulés. Les paramètres sont conservés pendant la session de page,
+aux travaux sélectionnés et à leurs coûts et gains. Les moyennes d'IDC et d'état
+restent pondérées par SRE sur **l'ensemble du parc**, y compris les bâtiments
+sans travaux : avant = parc au 1er janvier 2027 ; après = mêmes bâtiments,
+avec les valeurs après travaux pour les seuls bâtiments du programme sélectionné.
+L'**Investissement requis** et les gains absolus restent ceux de ce programme ;
+le pourcentage de CO₂ évité est rapporté aux émissions de tout le parc.
+Une sélection vide laisse donc les moyennes avant/après identiques.
+Les bâtiments gris sont en surveillance et ne génèrent pas de travaux simulés.
+Les paramètres sont conservés pendant la session de page,
 mais réinitialisés au rechargement. Changer la base personnalisée
 réinitialise ses curseurs et son calendrier.
 
@@ -123,12 +132,15 @@ Voir le [cahier des charges](./CAHIER-DES-CHARGES.md) et le panneau
 « Méthode & hypothèses » dans l'application.
 
 - IDC en **MJ/m²/an** ; intensité carbone en **kgCO₂e/m²/an**.
-- Année de référence fixe : **2026**, pour une démonstration reproductible.
+- Début du programme et année de référence fixe : **1er janvier 2027**,
+  avec les horizons **2027 / 2032 / 2037**, pour une démonstration reproductible.
+  Les dates des changements réglementaires (notamment 2031) ne sont pas décalées ;
+  le seuil initial de la Base légale est donc 650 MJ/m²·an et 48 kgCO₂e/m²·an.
 - Base légale : seuils IDC de l'art. 14 REn (800 MJ/m²·an, 650 dès 2027, 550 dès 2031 ; rien de programmé ensuite). Exemplaire, jusqu'en 2050 : Plan directeur de l'énergie 2020-2030 (450 MJ/m²·an ; CO₂ 25, puis 13 dès 2030), zéro net en 2050 (IDC 230, CO₂ 1 kgCO₂e/m²·an ; LCl, Stratégie climat de la Ville), valeurs 2040 interpolées (IDC 340, CO₂ 6). Aucune limite légale de CO₂ par bâtiment : les seuils CO₂ sont des équivalents du seuil IDC (voir `Data_legal/`). État : 0,5.
 - CO₂ = scope 1 + 2, calculé pour chaque bâtiment à partir de l'IDC, du système de chauffage et du facteur d'émission de son agent (`src/carriers.json` : combustion directe pour le gaz et le mazout, facteur du réseau pour l'électricité et le CAD). Le champ scope 1 de QuantHome n'est pas utilisé (facteurs incohérents, p. ex. 120 bâtiments au gaz avec le facteur du mazout).
 - Sans travaux, IDC et CO₂ constants pour tous les agents (facteurs d'émission constants : CAD 0,131, électricité 0,097 kgCO₂e/kWh) ; l'objectif de 1 kgCO₂e/m²·an en 2050 n'est donc pas atteint par un raccordement au CAD.
-- Échéance = première année où le bâtiment dépasse un seuil en vigueur cette année-là (calendrier daté, état dégradé avec l'âge), évaluée de 2026 à 2050 dans le tableau de bord comme dans le rapport. Couleurs du tableau de bord : 2026 rouge, 2027–2031 jaune, 2032–2036 vert, gris = aucun seuil dépassé d'ici 2036 (l'année d'un premier dépassement 2037–2050 est indiquée sur la fiche et l'infobulle). Les bâtiments gris n'ont aucun travaux simulés dans les KPI, la liste ni l'export CSV ; le rapport HTML les planifie jusqu'en 2050.
-- Profondeur de rénovation (interprétation, hypothèse modèle) : indice d'état de l'année des travaux < 0,70 → rénovation complète (façade, toit, cave, fenêtres, changement de chauffage fossile, photovoltaïque ; état remis à 1) ; sinon rénovation énergétique (chauffage, photovoltaïque, toit et cave, sans façade ni fenêtres ; état inchangé), escaladée en rénovation complète si elle laisse un seuil IDC, CO₂ ou d'état en vigueur dépassé entre l'année des travaux et 2036 (tableau de bord) ou 2050 (rapport). La même règle signale « encore hors seuil après travaux », avec l'année et le critère. Une seule rénovation par bâtiment.
+- Échéance = première année où le bâtiment dépasse un seuil en vigueur cette année-là (calendrier daté, état dégradé avec l'âge), évaluée de 2027 à 2050 dans le tableau de bord comme dans le rapport. Couleurs du tableau de bord : 2027 rouge, 2028–2032 jaune, 2033–2037 vert, gris = aucun seuil dépassé d'ici 2037 (l'année d'un premier dépassement 2038–2050 est indiquée sur la fiche et l'infobulle). Les bâtiments gris n'ont aucun travaux simulés dans les KPI ni la liste ; le rapport HTML les planifie jusqu'en 2050.
+- Profondeur de rénovation (interprétation, hypothèse modèle) : indice d'état de l'année des travaux < 0,70 → rénovation complète (façade, toit, cave, fenêtres, changement de chauffage fossile, photovoltaïque ; état remis à 1) ; sinon rénovation énergétique (chauffage, photovoltaïque, toit et cave, sans façade ni fenêtres ; état inchangé), escaladée en rénovation complète si elle laisse un seuil IDC, CO₂ ou d'état en vigueur dépassé entre l'année des travaux et 2037 (tableau de bord) ou 2050 (rapport). La même règle signale « encore hors seuil après travaux », avec l'année et le critère. Une seule rénovation par bâtiment.
 - Surfaces d'éléments déduites de la SRE (hypothèses modèle) : façade brute 1,0 m²/m², toiture et cave 0,33 m²/m². Fenêtres = part vitrée de l'affectation × façade brute : Logement 20 % et Administration 60 % (ordres de grandeur donnés par l'utilisateur) ; Logement mixte et Santé & social 25 %, Éducation et Commerce & ateliers 40 %, Culture & loisirs et Sport 30 %, autres 30 % (hypothèses modèle à valider).
 - Coûts et gains indicatifs ; aucune faisabilité technique certifiée.
 - Aucune IA générative dans cette version : moteur métier déterministe.

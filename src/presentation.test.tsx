@@ -5,7 +5,7 @@ import Blason from './Blason';
 import RenovationTab from './RenovationTab';
 import ScatterPlot from './ScatterPlot';
 import { BUILDINGS } from './data';
-import { BASE_YEAR, COHORTS, PRESETS, assessBuilding, assessPortfolio, renovationFor, selectProgram } from './model';
+import { BASE_YEAR, COHORTS, DASHBOARD_LAST_YEAR, PRESETS, assessBuilding, assessPortfolio, programMetrics, renovationFor, selectProgram } from './model';
 import type { Building } from './model';
 import { ICON_COLORS, SHADES, criteriaOf, markerColor } from './symbols';
 
@@ -35,11 +35,11 @@ describe('Présentation des scénarios', () => {
   it('affiche les six repères avec leurs valeurs et leur position sur chaque plage', () => {
     const html = renderToStaticMarkup(<ThresholdControls value={PRESETS.conservative.thresholds} editable onChange={vi.fn()} />);
     const references = [
-      ['idc-conservative', 'Scénario 1, Base légale : 800 MJ/m²/an', 75],
+      ['idc-conservative', 'Scénario 1, Base légale : 650 MJ/m²/an', 56.25],
       ['idc-ambitious', 'Scénario 2, Exemplaire : 450 MJ/m²/an', 31.25],
       ['condition-conservative', 'Scénario 1, Base légale : 0,50 / 1', 50],
       ['condition-ambitious', 'Scénario 2, Exemplaire : 0,50 / 1', 50],
-      ['carbon-conservative', 'Scénario 1, Base légale : 59 kgCO₂e/m²/an', 58 / 79 * 100],
+      ['carbon-conservative', 'Scénario 1, Base légale : 48 kgCO₂e/m²/an', 47 / 79 * 100],
       ['carbon-ambitious', 'Scénario 2, Exemplaire : 25 kgCO₂e/m²/an', 24 / 79 * 100],
     ] as const;
     for (const [id, label, position] of references) {
@@ -53,7 +53,7 @@ describe('Présentation des scénarios', () => {
   it('garde les repères des bases fixes lorsque les seuils modulables sont différents', () => {
     const html = renderToStaticMarkup(<ThresholdControls value={{ idc: 700, condition: 0.9, carbon: 35 }} editable onChange={vi.fn()} />);
     expect(html).toContain('value="700"');
-    expect(html).toContain('Base légale : 800 MJ/m²/an');
+    expect(html).toContain('Base légale : 650 MJ/m²/an');
     expect(html).toContain('Exemplaire : 450 MJ/m²/an');
     expect(html).not.toContain('disabled=""');
   });
@@ -63,6 +63,27 @@ describe('Présentation des scénarios', () => {
     expect((html.match(/disabled=""/g) ?? []).length).toBe(3);
     expect(html).not.toContain('class="range-references"');
     expect(html).not.toContain('class="reference-values"');
+  });
+
+  it('démarre au 1er janvier 2027 et affiche les trois horizons demandés', () => {
+    const html = renderToStaticMarkup(<App />);
+    expect(html).toContain('Seuils au 1er janvier 2027');
+    for (const label of ['Dès 2027', 'D’ici 2032', 'D’ici 2037']) expect(html).toContain(label);
+    expect(html).not.toContain('Aujourd’hui');
+  });
+
+  it('place l’export coloré sous les scénarios, sans boutons d’export dans la feuille de route', () => {
+    const html = renderToStaticMarkup(<App />);
+    const exportPosition = html.indexOf('class="strategy-export-button"');
+    expect(exportPosition).toBeGreaterThan(html.indexOf('class="strategy-options"'));
+    expect(exportPosition).toBeLessThan(html.indexOf('class="threshold-heading"'));
+    expect(html).toContain('Exporter la stratégie');
+    expect(html).not.toContain('Export CSV');
+    const header = html.slice(html.indexOf('<header'), html.indexOf('</header>'));
+    expect(header).not.toContain('Rapport HTML');
+    const roadmap = html.slice(html.indexOf('data-tour="roadmap"'));
+    expect(roadmap).not.toContain('Rapport HTML');
+    expect(roadmap).not.toContain('export-actions');
   });
 });
 
@@ -77,6 +98,22 @@ describe('Indicateurs de périmètre et identité', () => {
     expect(displayedArea).toBe(renderToStaticMarkup(<>{format(program.reduce((sum, item) => sum + item.building.area, 0))}</>));
     expect(html).toContain('bâtiments à rénover');
     expect(html).toContain('concernés');
+  });
+
+  it('affiche les moyennes de tout le parc et le nouveau libellé de l’investissement', () => {
+    const program = selectProgram(assessPortfolio(BUILDINGS, PRESETS.conservative), 0, null);
+    const metrics = programMetrics(program, PRESETS.conservative, DASHBOARD_LAST_YEAR, BUILDINGS);
+    const format = (value: number, digits = 0) => new Intl.NumberFormat('fr-CH', {
+      minimumFractionDigits: digits, maximumFractionDigits: digits,
+    }).format(value);
+    const html = renderToStaticMarkup(<App />);
+    expect(html).toContain('Investissement requis');
+    expect(html).not.toContain('<span>Enveloppe</span>');
+    expect(html).toContain('IDC moyen · tout le parc');
+    expect(html).toContain('État moyen · tout le parc');
+    expect(html).toContain(`data-testid="portfolio-idc">${format(metrics.idcBefore)}<`);
+    expect(html).toContain(`data-testid="portfolio-condition">${format(metrics.conditionBefore, 2)}<`);
+    expect(metrics.portfolioCount).toBe(BUILDINGS.length);
   });
 
   it('utilise le fichier du logo officiel sans redessiner le blason', () => {
@@ -136,7 +173,7 @@ describe('Couleurs des échéances', () => {
     const portfolio = assessPortfolio(BUILDINGS, PRESETS[id]);
     const ten = selectProgram(portfolio, 0, 'ten');
     expect(ten.length).toBeGreaterThan(0);
-    expect(ten.every((item) => item.dueYear !== null && item.dueYear > 2031 && item.dueYear <= 2036)).toBe(true);
+    expect(ten.every((item) => item.dueYear !== null && item.dueYear > BASE_YEAR + 5 && item.dueYear <= DASHBOARD_LAST_YEAR)).toBe(true);
     expect(markerColor('ten', 1)).toBe(SHADES.ten[0]);
     expect(new Set(ten.map((item) => item.building.id)).size).toBe(ten.length);
   });
