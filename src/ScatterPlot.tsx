@@ -1,17 +1,13 @@
 import { useState } from 'react';
-import { BUILDINGS } from './data';
 import { COHORTS, describeDue, inDashboardProgram, thresholdsAt } from './model';
-import type { Assessment, Strategy } from './model';
+import type { Assessment, Building, Strategy } from './model';
 import { SHAPES, criteriaOf, markerColor, shapeFor, symbolScale } from './symbols';
 
 const W = 900, H = 560, M = { top: 24, right: 28, bottom: 58, left: 70 };
-const xMax = Math.ceil(Math.max(...BUILDINGS.map((b) => b.idc)) / 100) * 100;
-const yMax = Math.ceil(Math.max(...BUILDINGS.map((b) => b.carbonIntensity)) / 10) * 10;
-const sx = (value: number) => M.left + value / xMax * (W - M.left - M.right);
-const sy = (value: number) => H - M.bottom - value / yMax * (H - M.top - M.bottom);
 const ticks = (max: number, step: number) => Array.from({ length: Math.floor(max / step) + 1 }, (_, i) => i * step);
 
 interface Props {
+  buildings: Building[];
   assessments: Assessment[];
   selected: string | null;
   strategy: Strategy;
@@ -19,7 +15,11 @@ interface Props {
   onSelect: (id: string) => void;
 }
 
-export default function ScatterPlot({ assessments, selected, strategy, year, onSelect }: Props) {
+export default function ScatterPlot({ buildings, assessments, selected, strategy, year, onSelect }: Props) {
+  const xMax = Math.ceil(Math.max(1, ...buildings.map((building) => building.idc)) / 100) * 100;
+  const yMax = Math.ceil(Math.max(1, ...buildings.map((building) => building.carbonIntensity)) / 10) * 10;
+  const sx = (value: number) => M.left + value / xMax * (W - M.left - M.right);
+  const sy = (value: number) => H - M.bottom - value / yMax * (H - M.top - M.bottom);
   const [hover, setHover] = useState<Assessment | null>(null);
   const limits = thresholdsAt(strategy, year);
   const ordered = [...assessments].sort((a, b) => b.building.area - a.building.area);

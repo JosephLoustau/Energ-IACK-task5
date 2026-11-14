@@ -15,6 +15,9 @@ a { color: inherit; }
 h1, h2, h3, h4, p { margin: 0; }
 h1, h2, h3, h4, .kpi-value { font-family: inherit; }
 .hidden { display: none !important; }
+.data-status { max-width: 720px; margin: 60px auto; padding: 24px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; }
+.data-status h1 { font-size: 22px; margin-bottom: 16px; }
+.data-status p { margin-bottom: 12px; line-height: 1.6; }
 [data-strategy="conservative"] { --scenario-color: #bf2638; --scenario-soft: #fff1f2; }
 [data-strategy="ambitious"] { --scenario-color: #237946; --scenario-soft: #edf7f0; }
 [data-strategy="custom"] { --scenario-color: #286cba; --scenario-soft: #edf4fd; }

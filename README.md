@@ -10,13 +10,25 @@ ne sont pas versionnées : chacun les génère localement avec ses propres ident
 
 ### Données
 
-Aucune donnée n'est commitée (`data/`, `*.geojson` et `src/buildings.generated.json`
-sont ignorés par Git). `npm run data` (lancé aussi avant `npm run dev` / `npm run build`)
-exécute [pipeline/stock.py](./pipeline/stock.py), qui interroge SITG, QuantHome et, si
-configuré, QBuildings (réponses brutes en cache dans `data/cache/`), écrit
-`public/data/ville_geneve_3d.geojson` et passe les bâtiments à
-[scripts/build-buildings.mjs](./scripts/build-buildings.mjs), qui écrit
-`src/buildings.generated.json`. En cas d'échec, les fichiers existants sont conservés.
+Aucun jeu de données API n'est versionné (`data/`, `public/data/`, `*.geojson`
+et `**/buildings.generated.json` sont ignorés par Git). Chaque nouveau clone
+doit préparer ses données avec ses propres identifiants :
+
+1. `npm run data` exécute [pipeline/stock.py](./pipeline/stock.py), qui interroge
+   SITG, QuantHome et, si configuré, QBuildings. Les réponses brutes restent
+   dans `data/cache/`, hors du dossier public.
+2. Le pipeline écrit `public/data/ville_geneve_3d.geojson`, puis
+   [scripts/build-buildings.mjs](./scripts/build-buildings.mjs) convertit les
+   bâtiments en `public/data/buildings.generated.json`.
+3. Le navigateur charge ce JSON à l'exécution : aucun jeu de bâtiments n'est
+   importé depuis `src/` ni incorporé au bundle JavaScript.
+
+`npm run dev`, `npm run build` et `npm test` vérifient les deux fichiers locaux
+et échouent explicitement s'ils sont absents, vides ou invalides. Les données
+locales valides sont réutilisables sans nouvel appel API à chaque démarrage.
+`npm run data` réutilise le cache des fournisseurs ; `npm run data -- --refresh`
+force de nouveaux appels API. Tout échec de préparation est une erreur :
+aucun repli silencieux sur des données anciennes ou fictives.
 Prérequis :
 
 - Python 3.11+ ;
@@ -34,6 +46,14 @@ pip install -r pipeline/requirements.txt
 npm run data
 ```
 
+Pour vérifier les données sans les régénérer : `npm run data:check`.
+Un GeoJSON déjà acquis peut être converti avec
+`node scripts/build-buildings.mjs chemin\vers\fichier.geojson`.
+Les JSON de configuration (`package.json`, `package-lock.json`,
+`tsconfig.json`, `src/carriers.json`) restent versionnés : ils ne contiennent
+pas de données API. Le nettoyage concerne la version actuelle et les futurs
+commits ; l'historique Git publié n'est pas réécrit.
+
 Le modèle de données et la provenance des attributs sont décrits dans
 [docs/data_model.html](./docs/data_model.html).
 
@@ -44,7 +64,7 @@ et les données générées (voir ci-dessus).
 
 ```powershell
 npm ci
-npm run data   # première fois, ou pour rafraîchir les données
+npm run data   # obligatoire avant le premier démarrage ; -- --refresh pour forcer les API
 npm run dev
 ```
 
@@ -144,23 +164,26 @@ Voir le [cahier des charges](./CAHIER-DES-CHARGES.md) et le panneau
 - Surfaces d'éléments déduites de la SRE (hypothèses modèle) : façade brute 1,0 m²/m², toiture et cave 0,33 m²/m². Fenêtres = part vitrée de l'affectation × façade brute : Logement 20 % et Administration 60 % (ordres de grandeur donnés par l'utilisateur) ; Logement mixte et Santé & social 25 %, Éducation et Commerce & ateliers 40 %, Culture & loisirs et Sport 30 %, autres 30 % (hypothèses modèle à valider).
 - Coûts et gains indicatifs ; aucune faisabilité technique certifiée.
 - Aucune IA générative dans cette version : moteur métier déterministe.
-- Seuls des noms et positions fictifs sont utilisés ; les performances
-  ne sont pas attribuées à de vrais bâtiments municipaux.
+- Les noms et positions proviennent des sources réelles. Les valeurs
+  manquantes sont estimées et signalées ; l'état et les résultats des travaux
+  restent des projections du modèle, pas des diagnostics mesurés.
 
 ### Organisation
 
 - [Moteur métier](./src/model.ts) : seuils annuels, priorités et KPI.
-- [Données](./src/data.ts) : parc réel généré localement, plus un générateur fictif déterministe.
+- [Données](./src/data.ts) : chargement et validation du parc réel depuis le dossier public.
+- [Chargement initial](./src/PortfolioLoader.tsx) : états de chargement et d'erreur, sans données de secours.
+- [Données de test](./src/test-data.ts) : lecture du parc local pour les tests d'intégration et générateur fictif réservé aux tests.
 - [Pipeline de données](./pipeline/) : sourcing SITG / QuantHome / QBuildings.
 - [Tableau de bord](./src/App.tsx) et [carte](./src/BuildingMap.tsx).
 - [Tests métier](./src/model.test.ts).
 - [Rapport HTML](./src/report/) : calculs ([plan.ts](./src/report/plan.ts)), mise en page ([runtime.js](./src/report/runtime.js), [report.css](./src/report/report.css)) et **textes par défaut** ([texts.ts](./src/report/texts.ts)) ; fonctionnement détaillé : [docs/report.html](./docs/report.html).
 - [Transcriptions de cadrage](./transcripts/transcripts.zip).
 
-### Intégration réelle ultérieure
+### Précautions d'intégration réelle
 
-L'intégration SITG/Quanthome et la lecture détaillée du guide API sont
-reportées à une étape dédiée. Avant cette étape :
+L'intégration SITG/QuantHome est exécutée localement par le pipeline Python.
+Avant une mise en production :
 
 1. Révoquer toute clé déjà partagée et générer une nouvelle clé.
 2. Ajouter un backend ou proxy pour protéger les identifiants ; aucune

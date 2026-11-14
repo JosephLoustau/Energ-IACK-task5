@@ -1,12 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import type { GeoJSONSource, LngLatBoundsLike, MapLayerMouseEvent } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import { AlertTriangle, Box, LocateFixed, Map as MapIcon } from 'lucide-react';
-import { BUILDINGS } from './data';
 import { COHORTS, describeDue } from './model';
-import type { Assessment } from './model';
+import type { Assessment, Building } from './model';
 import { ICON_COLORS, SHAPES, SHAPE_NAMES, criteriaOf, iconKey, markerColor, shapeFor, shapePolygon, symbolScale } from './symbols';
 
 maplibregl.setWorkerUrl(workerUrl);
@@ -24,11 +23,8 @@ function simplifyBasemap(map: maplibregl.Map) {
   for (const id of ROAD_CASING) if (map.getLayer(id)) map.setPaintProperty(id, 'line-color', 'rgb(90, 90, 90)');
 }
 
-const lngs = BUILDINGS.map((b) => b.coordinates[1]);
-const lats = BUILDINGS.map((b) => b.coordinates[0]);
-const BOUNDS: LngLatBoundsLike = [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]];
 const ICON_PX = 44; // pixelRatio 2 → 22 px à l'échelle 1
-const BLOCKS_URL = '/data/ville_geneve_3d.geojson'; // produit par stock.py (npm run data)
+const BLOCKS_URL = `${import.meta.env.BASE_URL}data/ville_geneve_3d.geojson`; // produit par stock.py (npm run data)
 const BLOCK_LAYERS = ['context-3d', 'city-3d', 'pins', 'selection-disc', 'selection-ring'];
 // Passage progressif plan → 3D : à Z_FLAT et en dessous, carte à plat ; à Z_FULL, volumes et inclinaison complets.
 const Z_FLAT = 13;
@@ -88,8 +84,8 @@ function footprintRadius(map: maplibregl.Map, id: string, lng: number, lat: numb
   return r || null;
 }
 
-function selectionRing(map: maplibregl.Map, id: string | null) {
-  const b = BUILDINGS.find((x) => x.id === id);
+function selectionRing(map: maplibregl.Map, id: string | null, buildings: Building[]) {
+  const b = buildings.find((x) => x.id === id);
   if (!b || !id) return { type: 'FeatureCollection' as const, features: [] };
   const [lat, lng] = b.coordinates;
   const R = (footprintRadius(map, id, lng, lat) ?? 6 + 6 * symbolScale(b.area)) + RING_MARGIN;
@@ -158,7 +154,7 @@ function addBlocks(map: maplibregl.Map) {
       'fill-extrusion-opacity': 0.95,
     },
   }, 'selected-halo');
-  map.addSource('selection', { type: 'geojson', data: selectionRing(map, null) });
+  map.addSource('selection', { type: 'geojson', data: selectionRing(map, null, []) });
   for (const part of ['disc', 'ring']) map.addLayer({
     id: `selection-${part}`, type: 'fill-extrusion', source: 'selection', layout: { visibility: 'none' },
     filter: ['==', ['get', 'part'], part],
@@ -216,13 +212,19 @@ function toCollection(assessments: Assessment[]) {
 }
 
 interface Props {
+  buildings: Building[];
   assessments: Assessment[];
   selected: string | null;
   active: boolean;
   onSelect: (id: string) => void;
 }
 
-export default function BuildingMap({ assessments, selected, active, onSelect }: Props) {
+export default function BuildingMap({ buildings, assessments, selected, active, onSelect }: Props) {
+  const bounds = useMemo<LngLatBoundsLike>(() => {
+    const lngs = buildings.map((building) => building.coordinates[1]);
+    const lats = buildings.map((building) => building.coordinates[0]);
+    return [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]];
+  }, [buildings]);
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const onSelectRef = useRef(onSelect);
@@ -236,7 +238,7 @@ export default function BuildingMap({ assessments, selected, active, onSelect }:
 
   useEffect(() => {
     const map = new maplibregl.Map({
-      container: container.current!, style: BASEMAP_STYLE, bounds: BOUNDS,
+      container: container.current!, style: BASEMAP_STYLE, bounds,
       fitBoundsOptions: { padding: 50 }, maxPitch: 70, dragRotate: false, attributionControl: { compact: true },
     });
     mapRef.current = map;
@@ -293,7 +295,7 @@ export default function BuildingMap({ assessments, selected, active, onSelect }:
       setReady(true);
     });
     return () => { popup.remove(); map.remove(); mapRef.current = null; setReady(false); };
-  }, []);
+  }, [bounds]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -312,19 +314,19 @@ export default function BuildingMap({ assessments, selected, active, onSelect }:
     map.setFilter('selected-halo', ['==', ['get', 'id'], selected ?? '']);
     map.setPaintProperty('city-3d', 'fill-extrusion-color', blockColor(selected));
     map.setPaintProperty('pins', 'fill-extrusion-color', pinColor(selected));
-    const building = BUILDINGS.find((b) => b.id === selected);
+    const building = buildings.find((b) => b.id === selected);
     if (building) map.easeTo({ center: [building.coordinates[1], building.coordinates[0]], duration: 500 });
-  }, [selected, ready]);
+  }, [selected, ready, buildings]);
 
   // Anneau 3D : recalculé quand les volumes sont chargés (l'emprise vient de leurs tuiles).
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
-    const update = () => (map.getSource('selection') as GeoJSONSource).setData(selectionRing(map, selected));
+    const update = () => (map.getSource('selection') as GeoJSONSource).setData(selectionRing(map, selected, buildings));
     update();
     map.once('idle', update);
     return () => { map.off('idle', update); };
-  }, [selected, is3d, ready]);
+  }, [selected, is3d, ready, buildings]);
 
   useEffect(() => { if (active) mapRef.current?.resize(); }, [active]);
 
@@ -361,7 +363,7 @@ export default function BuildingMap({ assessments, selected, active, onSelect }:
 
   return <div className="map-wrap">
     <div ref={container} className="building-map" aria-label="Carte des bâtiments de la Ville de Genève" />
-    <button className="map-recenter" onClick={() => mapRef.current?.fitBounds(BOUNDS, { padding: 50, pitch: 0 })} title="Recentrer sur le parc" aria-label="Recentrer sur le parc"><LocateFixed size={18} /></button>
+    <button className="map-recenter" onClick={() => mapRef.current?.fitBounds(bounds, { padding: 50, pitch: 0 })} title="Recentrer sur le parc" aria-label="Recentrer sur le parc"><LocateFixed size={18} /></button>
     <button className="map-recenter map-toggle-3d" onClick={() => setIs3d((v) => !v)} aria-pressed={is3d} title={is3d ? 'Rester en plan' : 'Volumes 3D en zoomant'} aria-label={is3d ? 'Rester en plan' : 'Volumes 3D en zoomant'}>{is3d ? <MapIcon size={18} /> : <Box size={18} />}</button>
     {blocksError && <div className="map-warning blocks" role="status"><AlertTriangle size={15} /> Volumes 3D indisponibles : <code>public/data/ville_geneve_3d.geojson</code> est introuvable (lancer <code>npm run data</code>). La carte 2D reste utilisable.</div>}
     {error && <div className="map-warning" role="status"><AlertTriangle size={15} /> Fond de carte swisstopo partiellement indisponible. Les points restent utilisables.</div>}

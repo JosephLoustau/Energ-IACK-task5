@@ -1,13 +1,15 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import App, { ThresholdControls } from './App';
+import PortfolioApp, { ThresholdControls } from './App';
 import Blason from './Blason';
 import RenovationTab from './RenovationTab';
 import ScatterPlot from './ScatterPlot';
-import { BUILDINGS } from './data';
+import { BUILDINGS } from './test-data';
 import { BASE_YEAR, COHORTS, DASHBOARD_LAST_YEAR, PRESETS, assessBuilding, assessPortfolio, programMetrics, renovationFor, selectProgram } from './model';
 import type { Building } from './model';
 import { ICON_COLORS, SHADES, criteriaOf, markerColor } from './symbols';
+
+const App = () => <PortfolioApp buildings={BUILDINGS} />;
 
 vi.mock('./BuildingMap', () => ({
   default: ({ assessments }: { assessments: { building: { id: string }; cohort: string }[] }) =>
@@ -153,7 +155,7 @@ describe('Couleurs des échéances', () => {
     let initialPositions: string[] | undefined;
     for (const strategy of strategies) {
       const assessments = assessPortfolio(BUILDINGS, strategy);
-      const html = renderToStaticMarkup(<ScatterPlot assessments={assessments} selected={null}
+      const html = renderToStaticMarkup(<ScatterPlot buildings={BUILDINGS} assessments={assessments} selected={null}
         strategy={strategy} year={BASE_YEAR} onSelect={vi.fn()} />);
       const points = [...html.matchAll(/<g transform="([^"]+)" opacity="([^"]+)" class="scatter-point" data-building-id="([^"]+)" data-cohort="([^"]+)"/g)];
       const positions = points.map((match) => `${match[3]}:${match[1]}`).sort();

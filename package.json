@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "data": "node scripts/build-data.mjs",
-    "predev": "npm run data",
-    "prebuild": "npm run data",
+    "predev": "node scripts/check-data.mjs",
+    "prebuild": "node scripts/check-data.mjs",
+    "pretest": "node scripts/check-data.mjs",
+    "data:check": "node scripts/check-data.mjs",
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1",
@@ -19,6 +21,7 @@
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.1.0",

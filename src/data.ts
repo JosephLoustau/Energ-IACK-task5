@@ -1,62 +1,50 @@
 import { withConditionModel } from './model';
 import type { Building, BuildingUse, Heating } from './model';
-import realBuildings from './buildings.generated.json';
 
-const districts = [
-  { name: 'Servette', coordinates: [46.218, 6.125] },
-  { name: 'Pâquis', coordinates: [46.216, 6.147] },
-  { name: 'Eaux-Vives', coordinates: [46.201, 6.171] },
-  { name: 'Plainpalais', coordinates: [46.190, 6.139] },
-  { name: 'Jonction', coordinates: [46.199, 6.122] },
-  { name: 'Champel', coordinates: [46.188, 6.157] },
-  { name: 'Saint-Jean', coordinates: [46.208, 6.116] },
-  { name: 'Petit-Saconnex', coordinates: [46.230, 6.123] },
-] as const;
-
-const uses: BuildingUse[] = ['École', 'Musée', 'Administration', 'Sport', 'Logement'];
-const heatingSystems: { name: Heating; factor: number }[] = [
-  { name: 'Gaz', factor: 0.202 },
-  { name: 'Mazout', factor: 0.267 },
-  { name: 'CAD', factor: 0.07 },
-  { name: 'Pompe à chaleur', factor: 0.025 },
+type BuildingData = Omit<Building, 'condition' | 'annualDecay'>;
+const buildingUses: BuildingUse[] = [
+  'École', 'Musée', 'Administration', 'Sport', 'Logement', 'Éducation',
+  'Logement mixte', 'Commerce & ateliers', 'Culture & loisirs', 'Santé & social',
 ];
+const heatingTypes: Heating[] = ['Gaz', 'Mazout', 'CAD', 'Pompe à chaleur', 'Gaz + mazout', 'Bois / biogaz', 'Électrique', 'Inconnu'];
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 
-function randomGenerator(seed: number) {
-  let state = seed;
-  return () => {
-    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
-    return state / 4294967296;
-  };
+function isBuildingData(value: unknown): value is BuildingData {
+  if (!isRecord(value)) return false;
+  return typeof value.id === 'string' && value.id.length > 0
+    && typeof value.name === 'string' && typeof value.district === 'string'
+    && buildingUses.some((use) => use === value.use) && heatingTypes.some((heating) => heating === value.heating)
+    && Array.isArray(value.coordinates) && value.coordinates.length === 2
+    && isFiniteNumber(value.coordinates[0]) && isFiniteNumber(value.coordinates[1])
+    && Math.abs(value.coordinates[0]) <= 90 && Math.abs(value.coordinates[1]) <= 180
+    && isFiniteNumber(value.area) && value.area > 0
+    && isFiniteNumber(value.constructionYear) && value.constructionYear > 0
+    && isFiniteNumber(value.idc) && value.idc >= 0
+    && isFiniteNumber(value.carbonIntensity) && value.carbonIntensity >= 0
+    && ['lastWorkYear', 'height', 'rentResidential', 'solarShare'].every((key) =>
+      value[key] === undefined || value[key] === null || isFiniteNumber(value[key]))
+    && ['destination', 'protection', 'idcStatus', 'idcSource'].every((key) =>
+      value[key] === undefined || typeof value[key] === 'string')
+    && ['fossil', 'cadAvailable'].every((key) => value[key] === undefined || typeof value[key] === 'boolean')
+    && (value.imputed === undefined || (Array.isArray(value.imputed) && value.imputed.every((key) => typeof key === 'string')));
 }
 
-export function createDemoBuildings(): Building[] {
-  const random = randomGenerator(2026);
-  return Array.from({ length: 96 }, (_, index) => {
-    const district = districts[index % districts.length]!;
-    const use = uses[index % uses.length]!;
-    const heating = heatingSystems[index % heatingSystems.length]!;
-    const idc = Math.round(230 + random() * 650);
-    return {
-      id: `DEMO-${String(index + 1).padStart(3, '0')}`,
-      name: `${use} démo ${String(index + 1).padStart(2, '0')}`,
-      district: district.name,
-      use,
-      coordinates: [
-        district.coordinates[0] + (random() - 0.5) * 0.009,
-        district.coordinates[1] + (random() - 0.5) * 0.011,
-      ],
-      area: Math.round(650 + random() * 7200),
-      constructionYear: Math.round(1890 + random() * 130),
-      condition: Number((0.32 + random() * 0.65).toFixed(2)),
-      annualDecay: Number((0.012 + random() * 0.018).toFixed(3)),
-      idc,
-      carbonIntensity: Number((idc / 3.6 * heating.factor).toFixed(1)),
-      heating: heating.name,
-    };
+export function parseBuildings(data: unknown): Building[] {
+  if (!Array.isArray(data) || data.length === 0) throw new Error('Le jeu de données bâtiments doit être une liste non vide.');
+  const ids = new Set<string>();
+  return data.map((value: unknown, index: number) => {
+    if (!isBuildingData(value)) throw new Error(`Données du bâtiment ${index + 1} invalides. Relancez npm run data.`);
+    if (ids.has(value.id)) throw new Error(`Identifiant bâtiment en double : ${value.id}. Relancez npm run data.`);
+    ids.add(value.id);
+    return withConditionModel(value);
   });
 }
 
-/** Parc réel de la Ville de Genève (stock.py → npm run data). */
-export const BUILDINGS: Building[] = (realBuildings as unknown as Omit<Building, 'condition' | 'annualDecay'>[])
-  .map(withConditionModel);
-export const BUILDING_USES = [...new Set(BUILDINGS.map((b) => b.use))].sort((a, b) => a.localeCompare(b, 'fr'));
+/** Données préparées localement, servies comme fichier statique sans être intégrées au bundle JavaScript. */
+export async function loadBuildings(signal?: AbortSignal): Promise<Building[]> {
+  const response = await fetch(`${import.meta.env.BASE_URL}data/buildings.generated.json`, { signal, cache: 'no-store' });
+  if (!response.ok) throw new Error(`Données bâtiments indisponibles (HTTP ${response.status}). Relancez npm run data.`);
+  return parseBuildings(await response.json());
+}

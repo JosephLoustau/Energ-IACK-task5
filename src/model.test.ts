@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BUILDINGS, createDemoBuildings } from './data';
+import { BUILDINGS, createDemoBuildings } from './test-data';
 import {
   BASE_YEAR, COHORTS, DASHBOARD_LAST_YEAR, DEEP_RENOVATION_CONDITION, PRESETS, TARGET_YEAR, assessBuilding, assessPortfolio, conditionAt, conditionAtAge,
   describeDue, effectiveAge, firstBreachAfterWorks, inDashboardProgram, packageFor, withConditionModel,

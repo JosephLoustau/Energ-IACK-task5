@@ -15,12 +15,11 @@ import ScatterPlot from './ScatterPlot';
 import Tour from './Tour';
 import { HtmlReport } from './report/HtmlReport';
 import { SHADES, SHAPES, shapeFor, symbolScale } from './symbols';
-import { BUILDINGS, BUILDING_USES } from './data';
 import {
   BASE_YEAR, COHORTS, CRITERIA, DASHBOARD_LAST_YEAR, DEEP_RENOVATION_CONDITION, DEPTHS, MAX_HORIZON, PRESETS, TARGET_YEAR, assessPortfolio,
   describeBreach, describeDepth, describeDue, inDashboardProgram, programMetrics, renovationFor, selectProgram,
 } from './model';
-import type { Assessment, Cohort, Strategy, StrategyId, Thresholds } from './model';
+import type { Assessment, Building, Cohort, Strategy, StrategyId, Thresholds } from './model';
 
 const number = (value: number, digits = 0) => new Intl.NumberFormat('fr-CH', {
   minimumFractionDigits: digits, maximumFractionDigits: digits,
@@ -164,7 +163,7 @@ function Legend({ counts, cohort, onCohort, useCounts, uses, onToggleUse, onClea
       </div>
       <h4>Affectation <small>{uses.size ? `${uses.size} sélectionnée(s)` : 'toutes'}</small>{uses.size > 0 && <button className="text-button" onClick={onClearUses}>Tout afficher</button>}</h4>
       <div className="legend-list">
-        {BUILDING_USES.map((use) => <button key={use} aria-pressed={uses.has(use)} className={`use-filter ${uses.has(use) ? 'active' : ''}`} onClick={() => onToggleUse(use)}>
+        {Object.keys(useCounts).sort((a, b) => a.localeCompare(b, 'fr')).map((use) => <button key={use} aria-pressed={uses.has(use)} className={`use-filter ${uses.has(use) ? 'active' : ''}`} onClick={() => onToggleUse(use)}>
           <ShapeIcon use={use} color="#347bc1" /><span>{use}</span><strong>{useCounts[use] ?? 0}</strong>
         </button>)}
       </div>
@@ -174,7 +173,7 @@ function Legend({ counts, cohort, onCohort, useCounts, uses, onToggleUse, onClea
   </aside>;
 }
 
-export default function App() {
+export default function App({ buildings }: { buildings: Building[] }) {
   const [strategyId, setStrategyId] = useState<StrategyId>('conservative');
   const [customBase, setCustomBase] = useState<'conservative' | 'ambitious'>('conservative');
   const [custom, setCustom] = useState<Strategy>({ ...PRESETS.conservative, id: 'custom', name: 'Modulable', thresholds: { ...PRESETS.conservative.thresholds }, changes: [...PRESETS.conservative.changes] });
@@ -187,13 +186,13 @@ export default function App() {
   const [showAssumptions, setShowAssumptions] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
   const strategy = strategyId === 'custom' ? custom : PRESETS[strategyId];
-  const portfolio = useMemo(() => assessPortfolio(BUILDINGS, strategy), [strategy]);
+  const portfolio = useMemo(() => assessPortfolio(buildings, strategy), [buildings, strategy]);
   const filtered = useMemo(() => portfolio.filter((item) =>
     (uses.size === 0 || uses.has(item.building.use))
     && `${item.building.name} ${item.building.district} ${item.building.id}`.toLocaleLowerCase('fr').includes(query.trim().toLocaleLowerCase('fr')),
   ), [portfolio, uses, query]);
   const program = useMemo(() => selectProgram(filtered, horizon, cohort), [filtered, horizon, cohort]);
-  const metrics = useMemo(() => programMetrics(program, strategy, DASHBOARD_LAST_YEAR, BUILDINGS), [program, strategy]);
+  const metrics = useMemo(() => programMetrics(program, strategy, DASHBOARD_LAST_YEAR, buildings), [program, strategy, buildings]);
   const programArea = program.reduce((sum, item) => sum + item.building.area, 0);
   const visible = useMemo(() => cohort ? filtered.filter((item) => item.cohort === cohort) : filtered, [filtered, cohort]);
   const selectedAssessment = visible.find((item) => item.building.id === selected);
@@ -224,7 +223,7 @@ export default function App() {
   }
   function exportReport() {
     const strategies = strategyId === 'custom' ? [PRESETS.conservative, PRESETS.ambitious, custom] : [PRESETS.conservative, PRESETS.ambitious];
-    void new HtmlReport({ buildings: BUILDINGS, strategies, selectedStrategy: strategy.id, scopeLabel: 'tout le parc' }).open();
+    void new HtmlReport({ buildings, strategies, selectedStrategy: strategy.id, scopeLabel: 'tout le parc' }).open();
   }
   const firstVisible = useRef<string | null>(null);
   firstVisible.current = (program[0] ?? visible[0])?.building.id ?? null;
@@ -240,7 +239,7 @@ export default function App() {
     <header className="topbar">
       <a className="brand" href="#main" aria-label="DeCathlon Genève — tableau de bord"><Blason /><img className="app-logo" src="/decathlon-geneve-logo.svg" width="140" height="66" alt="DeCathlon Genève" /><span className="brand-slogan">10 ans pour décarboner<br />le parc bâti</span></a>
       <div className="topbar-right">
-        <span className="topbar-count"><strong>{BUILDINGS.length}</strong> bâtiments de la Ville</span>
+        <span className="topbar-count"><strong>{buildings.length}</strong> bâtiments de la Ville</span>
         <button className="help-button" onClick={() => setTourOpen(true)}><PlayCircle size={16} /> Visite guidée</button>
         <button className="help-button" onClick={() => setShowAssumptions(true)} aria-expanded={showAssumptions}><CircleHelp size={16} /> Méthode & hypothèses</button>
       </div>
@@ -296,7 +295,7 @@ export default function App() {
               </button>)}
             </div>
           </div>
-          <button className="strategy-export-button" data-tour="export" disabled={BUILDINGS.length === 0} onClick={exportReport} title="Ouvrir le rapport HTML de la stratégie pour tout le parc"><Download size={18} /> Exporter la stratégie</button>
+          <button className="strategy-export-button" data-tour="export" disabled={buildings.length === 0} onClick={exportReport} title="Ouvrir le rapport HTML de la stratégie pour tout le parc"><Download size={18} /> Exporter la stratégie</button>
           {strategyId === 'custom' && <div className="custom-base"><label htmlFor="custom-base">Partir du scénario</label><select id="custom-base" value={customBase} onChange={(event) => resetCustom(event.target.value === 'ambitious' ? 'ambitious' : 'conservative')}><option value="conservative">{PRESETS.conservative.name}</option><option value="ambitious">{PRESETS.ambitious.name}</option></select><small>Changer la base réinitialise les curseurs et les seuils futurs.</small></div>}
           <div data-tour="thresholds">
             <div className="threshold-heading"><h3>Seuils au 1er janvier {BASE_YEAR}</h3>{strategyId === 'custom' ? <button className="icon-button" aria-label="Réinitialiser la stratégie personnalisée" onClick={() => resetCustom()}><RotateCcw size={14} /></button> : <span className="fixed-tag">PRÉDÉFINIS</span>}</div>
@@ -334,11 +333,11 @@ export default function App() {
                 <button role="tab" aria-selected={tab === 'measures'} className={tab === 'measures' ? 'active' : ''} data-tour="measures-tab" onClick={() => setTab('measures')}><Wrench size={15} /> Mesures de rénovation</button>
               </div>
               <label className="search-box"><Search size={15} /><input type="search" aria-label="Rechercher un bâtiment ou quartier" placeholder="Adresse, quartier, EGID…" value={query} onChange={(event) => { setQuery(event.target.value); setSelected(null); }} /></label>
-              <span className="map-count"><MapPin size={13} /> {visible.length} / {BUILDINGS.length}</span>
+              <span className="map-count"><MapPin size={13} /> {visible.length} / {buildings.length}</span>
             </div>
             <div className="view-body">
-              <div className={`view-pane ${tab === 'map' ? '' : 'hidden'}`}><BuildingMap assessments={visible} selected={selectedAssessment?.building.id ?? null} active={tab === 'map'} onSelect={setSelected} /></div>
-              {tab === 'chart' && <div className="view-pane"><ScatterPlot assessments={visible} selected={selectedAssessment?.building.id ?? null} strategy={strategy} year={chartYear} onSelect={setSelected} /></div>}
+              <div className={`view-pane ${tab === 'map' ? '' : 'hidden'}`}><BuildingMap buildings={buildings} assessments={visible} selected={selectedAssessment?.building.id ?? null} active={tab === 'map'} onSelect={setSelected} /></div>
+              {tab === 'chart' && <div className="view-pane"><ScatterPlot buildings={buildings} assessments={visible} selected={selectedAssessment?.building.id ?? null} strategy={strategy} year={chartYear} onSelect={setSelected} /></div>}
               {tab === 'measures' && <div className="view-pane measures-pane" data-tour="measures">{selectedAssessment
                 ? <RenovationTab key={`${selectedAssessment.building.id}|${strategy.id}`} assessment={selectedAssessment} strategy={strategy} onShowOnMap={() => setTab('map')} />
                 : <div className="empty-state"><Wrench size={27} /><h3>Aucun bâtiment sélectionné</h3><p>Choisissez un bâtiment sur la carte, dans le diagramme ou dans la feuille de route (pictogramme <Wrench size={12} />) pour étudier ses mesures de rénovation.</p></div>}</div>}

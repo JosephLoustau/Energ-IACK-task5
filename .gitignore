@@ -237,6 +237,6 @@ context.md
 data/
 *.geojson
 public/data/
-src/buildings.generated.json
+**/buildings.generated.json
 
 .vite/

@@ -1,10 +1,11 @@
 // Convertit la collection de bâtiments produite par stock.py (GeoJSON SITG + QuantHome) en un JSON
-// compact consommé par l'application : src/buildings.generated.json (non versionné).
+// compact consommé par l'application : public/data/buildings.generated.json (non versionné).
 // Appelé par scripts/build-data.mjs (npm run data) ; ou : node scripts/build-buildings.mjs fichier.geojson
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const OUTPUT = fileURLToPath(new URL('../src/buildings.generated.json', import.meta.url));
+export const OUTPUT = fileURLToPath(new URL('../public/data/buildings.generated.json', import.meta.url));
 
 const USAGE = {
   'Education': 'Éducation', 'Residential': 'Logement', 'Mixed residential': 'Logement mixte',
@@ -51,6 +52,9 @@ function yearOf(p) {
 }
 
 export function writeBuildings(geo, output = OUTPUT) {
+if (geo?.type !== 'FeatureCollection' || !Array.isArray(geo.features) || geo.features.length === 0) {
+  throw new Error('Données bâtiments absentes ou invalides : une FeatureCollection non vide est requise.');
+}
 const rows = geo.features.map((f) => {
   const p = f.properties;
   const [district, ...street] = (p.address ?? '').split(',');
@@ -70,7 +74,6 @@ for (const use of new Set(rows.map((r) => r.use))) {
 }
 const idcGlobal = median(rows.map((r) => r.p.idc));
 
-const NOW = 2026;
 const buildings = rows.map(({ f, p, district, street, use, heating, year, yearEstimated }) => {
   const imputed = [];
   let idc = p.idc;
@@ -110,11 +113,16 @@ const buildings = rows.map(({ f, p, district, street, use, heating, year, yearEs
     imputed,
   };
 });
-writeFileSync(output, JSON.stringify(buildings));
+mkdirSync(dirname(output), { recursive: true });
+writeFileSync(output, JSON.stringify(buildings), 'utf8');
 const count = (key) => buildings.filter((b) => b.imputed.includes(key)).length;
 console.log(`${buildings.length} bâtiments écrits dans ${output}`);
 console.log(`imputés — IDC: ${count('idc')}, CO₂ (IDC imputé ou chauffage inconnu): ${count('carbon')}, année: ${count('year')}`);
 console.log(`CO₂ scope 1 + 2 calculé pour ${buildings.length} bâtiments (IDC × facteur d'émission de l'agent, src/carriers.json)`);
+return buildings;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) writeBuildings(JSON.parse(readFileSync(process.argv[2], 'utf8')));
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  if (!process.argv[2]) throw new Error('Usage : node scripts/build-buildings.mjs fichier.geojson');
+  writeBuildings(JSON.parse(readFileSync(process.argv[2], 'utf8')));
+}
