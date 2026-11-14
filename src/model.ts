@@ -1,11 +1,11 @@
 import { MEASURE_IDS, planRenovation } from './renovation';
 
-export const BASE_YEAR = 2026;
+export const BASE_YEAR = 2027;
 /** Année cible des calendriers de seuils et de la feuille de route du rapport (neutralité carbone, LCl). */
 export const TARGET_YEAR = 2050;
 /** Horizon du tableau de bord (catégories immédiat / 5 ans / 10 ans) ; le rapport planifie jusqu'à TARGET_YEAR. */
 export const MAX_HORIZON = 10;
-/** Dernière année des catégories colorées et de la fenêtre de vérification après travaux du tableau de bord (2036). */
+/** Dernière année des catégories colorées et de la fenêtre de vérification après travaux du tableau de bord. */
 export const DASHBOARD_LAST_YEAR = BASE_YEAR + MAX_HORIZON;
 
 export type BuildingUse = 'École' | 'Musée' | 'Administration' | 'Sport' | 'Logement'
@@ -89,9 +89,8 @@ export const PRESETS: Record<'conservative' | 'ambitious', Strategy> = {
   conservative: {
     id: 'conservative',
     name: 'Base légale',
-    thresholds: { condition: 0.5, idc: 800, carbon: 59 },
+    thresholds: { condition: 0.5, idc: 650, carbon: 48 },
     changes: [
-      { year: 2027, thresholds: { condition: 0.5, idc: 650, carbon: 48 } },
       { year: 2031, thresholds: { condition: 0.5, idc: 550, carbon: 41 } },
     ],
   },
@@ -238,7 +237,7 @@ export function assessBuilding(building: Building, strategy: Strategy, lastYear 
   };
 }
 
-/** Le bâtiment a des travaux simulés dans le tableau de bord : premier dépassement d'ici 2036 (rouge, jaune, vert). */
+/** Le bâtiment a des travaux simulés dans le tableau de bord (rouge, jaune, vert). */
 export const inDashboardProgram = (item: Assessment) => item.cohort !== 'safe' && item.dueYear !== null;
 
 /**
@@ -250,7 +249,7 @@ export const inDashboardProgram = (item: Assessment) => item.cohort !== 'safe' &
  *    est inchangé (indice de l'année des travaux, puis il continue de se dégrader).
  * Règle (interprétation de la demande, hypothèse modèle) : complète si l'indice d'état de l'année des travaux est
  * inférieur à DEEP_RENOVATION_CONDITION (reason 'condition') ; sinon énergétique, sauf si ce paquet laisse un seuil en
- * vigueur dépassé entre l'année des travaux et la fin de la fenêtre (2036 au tableau de bord, 2050 dans le rapport) :
+ * vigueur dépassé entre l'année des travaux et la fin de la fenêtre (DASHBOARD_LAST_YEAR ou TARGET_YEAR) :
  * alors complète (reason 'thresholds'). Une seule rénovation par bâtiment est modélisée.
  */
 export const DEEP_RENOVATION_CONDITION = 0.7;
@@ -404,30 +403,37 @@ export function selectProgram(assessments: Assessment[], horizon: number, cohort
     : inDashboardProgram(item) && item.dueYear! <= BASE_YEAR + Math.min(horizon, MAX_HORIZON));
 }
 
-/** Indicateurs du programme, avec le paquet recommandé de chaque bâtiment ; les bâtiments gris n'ont pas de travaux. */
-export function programMetrics(program: Assessment[], strategy: Strategy, lastYear = DASHBOARD_LAST_YEAR) {
+/** Coûts et gains du programme ; moyennes pondérées par SRE sur le parc fourni, inchangé hors travaux sélectionnés. */
+export function programMetrics(program: Assessment[], strategy: Strategy, lastYear = DASHBOARD_LAST_YEAR, buildings?: Building[]) {
   const eligible = program.filter(inDashboardProgram);
+  const portfolio = buildings ?? eligible.map((item) => item.building);
   const area = eligible.reduce((sum, item) => sum + item.building.area, 0);
-  const totals = eligible.reduce((sum, item) => {
-    const renovation = renovationFor(item.building, item.dueYear!, strategy, lastYear);
+  const renovations = new Map(eligible.map((item) => [
+    item.building.id, renovationFor(item.building, item.dueYear!, strategy, lastYear),
+  ]));
+  const portfolioArea = portfolio.reduce((sum, building) => sum + building.area, 0);
+  const totals = portfolio.reduce((sum, building) => {
+    const renovation = renovations.get(building.id);
     return {
-      cost: sum.cost + renovation.cost,
-      carbonBefore: sum.carbonBefore + item.building.carbonIntensity * item.building.area / 1000,
-      carbonSaved: sum.carbonSaved + renovation.carbonSaved,
-      idcBefore: sum.idcBefore + item.building.idc * item.building.area,
-      idcAfter: sum.idcAfter + renovation.idcAfter * item.building.area,
-      conditionBefore: sum.conditionBefore + renovation.conditionBefore * item.building.area,
-      conditionAfter: sum.conditionAfter + renovation.conditionAfter * item.building.area,
+      cost: sum.cost + (renovation?.cost ?? 0),
+      carbonBefore: sum.carbonBefore + building.carbonIntensity * building.area / 1000,
+      carbonSaved: sum.carbonSaved + (renovation?.carbonSaved ?? 0),
+      idcBefore: sum.idcBefore + building.idc * building.area,
+      idcAfter: sum.idcAfter + (renovation?.idcAfter ?? building.idc) * building.area,
+      conditionBefore: sum.conditionBefore + building.condition * building.area,
+      conditionAfter: sum.conditionAfter + (renovation?.conditionAfter ?? building.condition) * building.area,
     };
   }, { cost: 0, carbonBefore: 0, carbonSaved: 0, idcBefore: 0, idcAfter: 0, conditionBefore: 0, conditionAfter: 0 });
   return {
     ...totals,
     count: eligible.length,
     area,
-    idcBefore: area ? totals.idcBefore / area : 0,
-    idcAfter: area ? totals.idcAfter / area : 0,
-    conditionBefore: area ? totals.conditionBefore / area : 0,
-    conditionAfter: area ? totals.conditionAfter / area : 0,
+    portfolioCount: portfolio.length,
+    portfolioArea,
+    idcBefore: portfolioArea ? totals.idcBefore / portfolioArea : 0,
+    idcAfter: portfolioArea ? totals.idcAfter / portfolioArea : 0,
+    conditionBefore: portfolioArea ? totals.conditionBefore / portfolioArea : 0,
+    conditionAfter: portfolioArea ? totals.conditionAfter / portfolioArea : 0,
     carbonReduction: totals.carbonBefore ? totals.carbonSaved / totals.carbonBefore : 0,
   };
 }

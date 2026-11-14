@@ -17,6 +17,6 @@ export const TOUR_STEPS: TourStep[] = [
   { target: 'map', title: 'Lisez la carte', body: 'La taille suit la surface énergétique et la forme indique l’affectation. Rouge : immédiat ; jaune : 5 ans ; vert : 10 ans, tous à pleine opacité. Gris à 30 % : surveillance au-delà de 10 ans. Une teinte plus foncée indique davantage de critères dépassés.', onEnter: 'tab-map' },
   { target: 'legend', title: 'Filtrez avec la légende', body: 'Cliquez sur une échéance pour n’afficher que ces bâtiments, ou sur une affectation pour isoler un type d’usage.' },
   { target: 'chart-tab', title: 'Passez au diagramme', body: 'IDC en abscisse, intensité carbone en ordonnée : repérez d’un coup d’œil les bâtiments hors seuils.', onEnter: 'tab-chart' },
-  { target: 'kpis', title: 'Mesurez l’impact', body: 'Les widgets montrent le coût estimé, le CO₂ évitable, l’IDC et l’état moyens. Leur couleur suit le scénario : rouge pour Base légale, vert pour Exemplaire, bleu pour Modulable. Les bâtiments et m² précisent le périmètre.' },
-  { target: 'roadmap', title: 'Consultez la feuille de route', body: 'La liste classe les bâtiments par échéance et critères ; elle s’exporte en CSV.' },
+  { target: 'kpis', title: 'Mesurez l’impact', body: 'Les widgets montrent l’investissement requis et le CO₂ évitable des travaux sélectionnés. L’IDC et l’état moyens sont pondérés par surface sur tout le parc, y compris les bâtiments sans travaux. Leur couleur suit le scénario : rouge pour Base légale, vert pour Exemplaire, bleu pour Modulable.' },
+  { target: 'roadmap', title: 'Consultez la feuille de route', body: 'La liste classe les bâtiments par échéance et critères. Le bouton « Exporter la stratégie », sous les scénarios, ouvre le rapport HTML pour tout le parc.' },
 ];
