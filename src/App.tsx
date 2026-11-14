@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import {
   ArrowRight, Building2, CalendarDays, Check, ChevronRight,
@@ -111,32 +111,14 @@ function FutureThresholds({ strategy, onChange }: { strategy: Strategy; onChange
   </div>;
 }
 
-/** Barre horizontale actuel / rénové avec repère du seuil ; les valeurs sont dans l'infobulle et le texte alternatif. */
-function HorizontalBar({ label, unit, before, after, limit, limitYear, color }: {
-  label: string; unit: string; before: number; after: number | undefined; limit: number; limitYear: number; color: string;
-}) {
-  const max = Math.max(before, after ?? 0, limit) * 1.1 || 1;
-  const pct = (value: number) => `${Math.min(100, value / max * 100)}%`;
-  const text = `${label} : ${number(before, before < 10 ? 1 : 0)} ${unit}${after !== undefined ? `, après rénovation ${number(after, after < 10 ? 1 : 0)}` : ''} ; seuil ${limitYear} : ${number(limit, limit < 10 ? 1 : 0)}`;
-  return <div className="hbar" role="img" aria-label={text} title={text}>
-    <span className="hbar-label">{label} <small>{unit} · seuil {limitYear}</small></span>
-    <div className="hbar-track">
-      <div className="hbar-fill" style={{ width: pct(before), background: color }} />
-      {after !== undefined && <div className="hbar-fill after" style={{ width: pct(after) }} />}
-      <div className="hbar-limit" style={{ left: pct(limit) }} />
-    </div>
-  </div>;
-}
-
-function BuildingDetail({ assessment, strategy, onClose }: { assessment: Assessment; strategy: Strategy; onClose: () => void }) {
+function BuildingDetail({ assessment, strategy, onClose, onShowMeasures }: { assessment: Assessment; strategy: Strategy; onClose: () => void; onShowMeasures: () => void }) {
   const { building, dueYear, dueThresholds, dueCondition } = assessment;
   // Le gris peut avoir une année de dépassement au-delà de l'horizon du tableau de bord, sans travaux simulés.
   const renovation = inDashboardProgram(assessment) ? renovationFor(building, dueYear!, strategy, DASHBOARD_LAST_YEAR) : null;
   const due = describeDue(assessment);
-  const thresholdYear = dueYear ?? TARGET_YEAR;
   const state = COHORTS[assessment.cohort];
   return <section className="detail-card" aria-label={`Fiche de ${building.name}`}>
-    <div className="detail-heading"><div className="detail-icon"><Building2 size={23} /></div><div><small>{building.id} · {building.use}</small><h3>{building.name}</h3><p><MapPin size={13} /> {building.district}{building.destination ? ` · ${building.destination}` : ''}</p></div><button className="icon-button close-detail" aria-label="Fermer la fiche bâtiment" onClick={onClose}><X size={18} /></button></div>
+    <div className="detail-heading"><div className="detail-icon"><Building2 size={23} /></div><div><small>{building.id} · {building.use}</small><h3>{building.name}</h3><p><MapPin size={13} /> {building.district}{building.destination ? ` · ${building.destination}` : ''}</p></div><button className="icon-button measures-detail" aria-label={`Mesures de rénovation de ${building.name}`} title="Mesures de rénovation" onClick={onShowMeasures}><Wrench size={17} /></button><button className="icon-button close-detail" aria-label="Fermer la fiche bâtiment" onClick={onClose}><X size={18} /></button></div>
     <span className={`status-badge ${assessment.cohort}`}>{state.label}{dueYear !== null && (renovation ? ` · ${dueYear}` : ` · 1er dépassement ${dueYear}`)}</span>
     <div className="detail-properties"><span>Surface énergétique<strong>{number(building.area)} m²</strong></span><span>Construction{building.imputed?.includes('year') ? ' (estimée)' : ''}<strong>{building.constructionYear}</strong></span><span>Chauffage actuel<strong>{building.heating}{building.fossil ? ' · fossile' : ''}</strong></span><span>État modélisé {BASE_YEAR}<strong>{number(building.condition, 2)}{building.effectiveAge !== undefined ? ` · âge effectif ${building.effectiveAge} ans` : ''}</strong></span><span>Dégradation simulée<strong>−{number(building.annualDecay, 3)} / an</strong></span>{building.protection && building.protection !== 'none' && <span>Protection patrimoniale<strong>{building.protection}</strong></span>}{building.idcStatus && <span>Statut IDC (OCEN)<strong>{building.idcStatus}</strong></span>}</div>
     <h4>Pourquoi cette priorité ?</h4>
@@ -147,8 +129,8 @@ function BuildingDetail({ assessment, strategy, onClose }: { assessment: Assessm
     </ul> : <p className="muted-text">Aucun seuil dépassé jusqu’en {DASHBOARD_LAST_YEAR}{due ? ` ; ${due} (seuils en vigueur cette année-là).` : ` ni jusqu’en ${TARGET_YEAR}.`} Surveillance recommandée, sans travaux simulés.</p>}
     <h4>{renovation ? `${DEPTHS[renovation.depth].label} simulée en ${dueYear}` : 'État actuel'}</h4>
     <div className="before-after">
-      <HorizontalBar label="IDC" unit="MJ/m²/an" before={building.idc} after={renovation?.idcAfter} limit={dueThresholds.idc} limitYear={thresholdYear} color={state.color} />
-      <HorizontalBar label="CO₂" unit="kg/m²/an" before={building.carbonIntensity} after={renovation?.carbonAfter} limit={dueThresholds.carbon} limitYear={thresholdYear} color={state.color} />
+      <div><span>IDC <small>MJ/m²/an</small></span><strong>{number(building.idc)}{renovation && <><ArrowRight size={13} />{number(renovation.idcAfter)}</>}</strong></div>
+      <div><span>Intensité carbone <small>kg/m²/an</small></span><strong>{number(building.carbonIntensity, 1)}{renovation && <><ArrowRight size={13} />{number(renovation.carbonAfter, 1)}</>}</strong></div>
       <div><span>Indice d’état</span><strong>{number(renovation?.conditionBefore ?? building.condition, 2)}{renovation && <><ArrowRight size={13} />{number(renovation.conditionAfter, 2)}</>}</strong></div>
     </div>
     {renovation && <><div className="detail-investment"><span>Investissement estimé<strong>{money(renovation.cost)} CHF</strong></span><span>CO₂ évité chaque année<strong>{number(renovation.carbonSaved, 1)} tCO₂e</strong></span><span>Carbone gris des travaux<strong>{number(renovation.embodiedCarbon, 1)} tCO₂e</strong></span></div>
@@ -244,11 +226,19 @@ export default function App() {
     const strategies = strategyId === 'custom' ? [PRESETS.conservative, PRESETS.ambitious, custom] : [PRESETS.conservative, PRESETS.ambitious];
     void new HtmlReport({ buildings: BUILDINGS, strategies, selectedStrategy: strategy.id, scopeLabel: 'tout le parc' }).open();
   }
-  const onTourEnter = useCallback((action: 'tab-map' | 'tab-chart') => setTab(action === 'tab-map' ? 'map' : 'chart'), []);
+  const firstVisible = useRef<string | null>(null);
+  firstVisible.current = (program[0] ?? visible[0])?.building.id ?? null;
+  const onTourEnter = useCallback((action: 'tab-map' | 'tab-chart' | 'tab-measures') => {
+    if (action === 'tab-measures') {
+      // L'étape se concentre sur un bâtiment : on retient le premier de la feuille de route s'il n'y en a pas déjà un.
+      setSelected((current) => current ?? firstVisible.current);
+      setTab('measures');
+    } else setTab(action === 'tab-map' ? 'map' : 'chart');
+  }, []);
 
   return <div className="app-shell" data-strategy={strategyId}>
     <header className="topbar">
-      <a className="brand" href="#main" aria-label="DeCathlon Genève — tableau de bord"><Blason /><img className="app-logo" src="/decathlon-geneve-logo.png" width="140" height="66" alt="DeCathlon Genève" /><span className="brand-slogan">10 ans pour renforcer<br />le parc bâti</span></a>
+      <a className="brand" href="#main" aria-label="DeCathlon Genève — tableau de bord"><Blason /><img className="app-logo" src="/decathlon-geneve-logo.svg" width="140" height="66" alt="DeCathlon Genève" /><span className="brand-slogan">10 ans pour renforcer<br />le parc bâti</span></a>
       <div className="topbar-right">
         <span className="topbar-count"><strong>{BUILDINGS.length}</strong> bâtiments de la Ville</span>
         <button className="help-button" onClick={() => setTourOpen(true)}><PlayCircle size={16} /> Visite guidée</button>
@@ -306,7 +296,7 @@ export default function App() {
               </button>)}
             </div>
           </div>
-          <button className="strategy-export-button" disabled={BUILDINGS.length === 0} onClick={exportReport} title="Ouvrir le rapport HTML de la stratégie pour tout le parc"><Download size={18} /> Exporter la stratégie</button>
+          <button className="strategy-export-button" data-tour="export" disabled={BUILDINGS.length === 0} onClick={exportReport} title="Ouvrir le rapport HTML de la stratégie pour tout le parc"><Download size={18} /> Exporter la stratégie</button>
           {strategyId === 'custom' && <div className="custom-base"><label htmlFor="custom-base">Partir du scénario</label><select id="custom-base" value={customBase} onChange={(event) => resetCustom(event.target.value === 'ambitious' ? 'ambitious' : 'conservative')}><option value="conservative">{PRESETS.conservative.name}</option><option value="ambitious">{PRESETS.ambitious.name}</option></select><small>Changer la base réinitialise les curseurs et les seuils futurs.</small></div>}
           <div data-tour="thresholds">
             <div className="threshold-heading"><h3>Seuils au 1er janvier {BASE_YEAR}</h3>{strategyId === 'custom' ? <button className="icon-button" aria-label="Réinitialiser la stratégie personnalisée" onClick={() => resetCustom()}><RotateCcw size={14} /></button> : <span className="fixed-tag">PRÉDÉFINIS</span>}</div>
@@ -349,11 +339,11 @@ export default function App() {
             <div className="view-body">
               <div className={`view-pane ${tab === 'map' ? '' : 'hidden'}`}><BuildingMap assessments={visible} selected={selectedAssessment?.building.id ?? null} active={tab === 'map'} onSelect={setSelected} /></div>
               {tab === 'chart' && <div className="view-pane"><ScatterPlot assessments={visible} selected={selectedAssessment?.building.id ?? null} strategy={strategy} year={chartYear} onSelect={setSelected} /></div>}
-              {tab === 'measures' && <div className="view-pane measures-pane">{selectedAssessment
+              {tab === 'measures' && <div className="view-pane measures-pane" data-tour="measures">{selectedAssessment
                 ? <RenovationTab key={`${selectedAssessment.building.id}|${strategy.id}`} assessment={selectedAssessment} strategy={strategy} onShowOnMap={() => setTab('map')} />
                 : <div className="empty-state"><Wrench size={27} /><h3>Aucun bâtiment sélectionné</h3><p>Choisissez un bâtiment sur la carte, dans le diagramme ou dans la feuille de route (pictogramme <Wrench size={12} />) pour étudier ses mesures de rénovation.</p></div>}</div>}
               {tab !== 'measures' && <Legend counts={counts} cohort={cohort} onCohort={(value) => { setCohort(value); setSelected(null); }} useCounts={useCounts} uses={uses} onToggleUse={toggleUse} onClearUses={() => setUses(new Set())} onResetFilters={resetFilters} />}
-              {tab !== 'measures' && selectedAssessment && <div className="detail-float"><BuildingDetail assessment={selectedAssessment} strategy={strategy} onClose={() => setSelected(null)} /></div>}
+              {tab !== 'measures' && selectedAssessment && <div className="detail-float"><BuildingDetail assessment={selectedAssessment} strategy={strategy} onClose={() => setSelected(null)} onShowMeasures={() => setTab('measures')} /></div>}
             </div>
           </section>
 
