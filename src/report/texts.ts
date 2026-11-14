@@ -104,7 +104,7 @@ export const REPORT_TEXTS = {
     ['Limites', 'Non modélisés : faisabilité PAC/CAD, patrimoine protégé, subventions, inflation, économies d’exploitation, carbone gris des travaux, capacité des entreprises, émissions après {horizon}. Facteurs d’émission constants : la décarbonation future du CAD et de l’électricité n’est pas comptée, et l’objectif de 1 kgCO₂e/m²·an en 2050 n’est pas atteint par un raccordement au CAD (0,131 kg/kWh).'],
     ['Sources', 'SITG, QuantHome. Indice d’état = proxy (âge, travaux récents), pas un diagnostic Stratus. Base légale : seuils IDC de l’art. 14 REn (800, puis 650 dès 2027 et 550 dès 2031) ; Exemplaire : Plan directeur de l’énergie 2020-2030 (IDC 450, CO₂ 25 puis 13 dès 2030), puis zéro net en 2050 (LCl, Stratégie climat de la Ville : IDC 230, CO₂ 1) ; valeurs de 2040 interpolées. Aucune limite légale de CO₂ par bâtiment : seuils CO₂ = équivalents du seuil IDC. CO₂ = scope 1 + 2, calculé pour chaque bâtiment à partir de l’IDC, du système de chauffage et du facteur d’émission de son agent ; le champ scope 1 de QuantHome n’est pas utilisé (facteurs incohérents).'],
   ] as [string, string][],
-  a2Footer: 'Document d’aide à la décision généré par StratoRéno le {date}. Les seuils, coûts et calendriers sont des hypothèses de simulation, pas des obligations légales ni des devis.', // {date}
+  a2Footer: 'Document d’aide à la décision généré par DeCathlon Genève le {date}. Les seuils, coûts et calendriers sont des hypothèses de simulation, pas des obligations légales ni des devis.', // {date}
 
   // ---- Toolbar help ("?") ------------------------------------------------------------------
   helpThermostatTitle: 'Agir sur la demande avant de rénover',
@@ -118,7 +118,7 @@ export const REPORT_TEXTS = {
     + '<p>Le rapport multiplie les tonnes émises de {year} à {horizon} par le CSC et les ajoute à l’investissement : c’est le <b>coût complet</b>. Les coûts sont affichés avec et sans le CSC.</p>'
     + '<p class="muted">Défaut : {defaultScc} CHF/tCO₂e. Pas d’actualisation ; les émissions après {horizon} ne sont pas comptées.</p>',
 
-  pageFooter: 'StratoRéno · Feuille de route de décarbonation',
+  pageFooter: 'DeCathlon Genève · Feuille de route de décarbonation',
 };
 
 export type ReportTexts = typeof REPORT_TEXTS;
