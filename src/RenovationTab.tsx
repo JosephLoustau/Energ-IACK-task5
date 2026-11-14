@@ -64,13 +64,15 @@ export default function RenovationTab({ assessment, strategy, onShowOnMap }: { a
   const plan = planRenovation(building, selection);
   const { before, after } = plan;
   const toggle = (id: string) => setSelection((current) => { const next = new Set(current); if (!next.delete(id)) next.add(id); return next; });
+  // Coût net : coûts + loyers non perçus − hausse de loyer (recette).
+  const netCost = (side: typeof before) => side.total + side.rentLoss - side.rentGain;
   const costSegments = (side: typeof before): Segment[] => [
     { value: side.energyCost, className: 'seg-energy', label: 'Énergie' },
     { value: side.envelopeCost, className: 'seg-envelope', label: 'Enveloppe thermique (annualisée)' },
     { value: side.equipmentCost, className: 'seg-equipment', label: 'Équipements techniques (annualisés)' },
     { value: side.carbonCost, className: 'seg-carbon', label: 'Émissions carbone' },
-    { value: side.rentGain, className: 'seg-rent-gain', label: 'Hausse de loyer (confort)' },
-    { value: -side.rentLoss, className: 'seg-rent-loss', label: 'Manque à gagner de loyers (annualisé)' },
+    { value: side.rentLoss, className: 'seg-rent-loss', label: 'Manque à gagner de loyers (annualisé)' },
+    { value: -side.rentGain, className: 'seg-rent-gain', label: 'Hausse de loyer (confort)' },
   ];
   const included = plan.measures.filter((m) => m.included);
   const carbonSavedPerYear = (before.carbon - after.carbon) * building.area / 1000;
@@ -108,11 +110,11 @@ export default function RenovationTab({ assessment, strategy, onShowOnMap }: { a
         <div className="measures-total"><span>{included.length} mesure{included.length > 1 ? 's' : ''} retenue{included.length > 1 ? 's' : ''}</span><strong>{fmt(plan.capex)} CHF</strong><span>{fmt(after.renovationCost)} CHF/an</span></div>
       </div>
       <div className="costs-panel">
-        <div className="charts-legend" aria-hidden="true"><span><i className="seg-energy" />Énergie</span><span><i className="seg-envelope" />Enveloppe thermique</span><span><i className="seg-equipment" />Équipements techniques</span><span><i className="seg-carbon" />Carbone ({SOCIAL_CARBON_COST} CHF/tCO₂)</span><span><i className="seg-rent-gain" />Hausse de loyer (+)</span><span><i className="seg-rent-loss" />Manque à gagner (−)</span></div>
+        <div className="charts-legend" aria-hidden="true"><span><i className="seg-energy" />Énergie</span><span><i className="seg-envelope" />Enveloppe thermique</span><span><i className="seg-equipment" />Équipements techniques</span><span><i className="seg-carbon" />Carbone ({SOCIAL_CARBON_COST} CHF/tCO₂)</span><span><i className="seg-rent-loss" />Manque à gagner (+)</span><span><i className="seg-rent-gain" />Hausse de loyer (−)</span></div>
         <BarChart title="Coûts annuels" unit="CHF/an" ariaLabel="Coûts annuels actuels et rénovés : énergie, enveloppe, équipements, carbone et loyers"
-          negativeLabel={(column) => column.label === 'Rénové' ? `−${kchf(after.rentLoss)}` : ''} columns={[
-            { label: 'Actuel', total: `${kchf(before.total)} CHF`, segments: costSegments(before) },
-            { label: 'Rénové', total: `${kchf(after.total + after.rentGain)} CHF`, segments: costSegments(after) },
+          negativeLabel={(column) => column.label === 'Rénové' ? `−${kchf(after.rentGain)}` : ''} columns={[
+            { label: 'Actuel', total: `${kchf(netCost(before))} CHF`, segments: costSegments(before) },
+            { label: 'Rénové', total: `${kchf(netCost(after))} CHF`, segments: costSegments(after) },
           ]} />
       </div>
     </div>

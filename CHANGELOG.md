@@ -4,6 +4,9 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/).
 
 ## [Non publié]
 
+### Corrigé
+- Graphique « Coûts annuels » (onglet « Mesures de rénovation » et `BuildingCharts`) : le manque à gagner de loyers est un coût, tracé au-dessus de l'axe ; la hausse de loyer est une recette, tracée en dessous. Le total affiché est le coût net (coûts + manque à gagner − hausse de loyer) ; auparavant la hausse de loyer était ajoutée aux coûts et le manque à gagner ignoré.
+
 ### Modifié
 - Part vitrée selon l'affectation (`src/renovation.ts`, `WINDOW_SHARE`) : façade brute (mur + fenêtres) de 1,0 m²/m² SRE (hypothèse modèle) ; fenêtres = part × façade brute, façade opaque = le reste. Logement 20 % et Administration 60 % (valeurs de l'utilisateur) ; Logement mixte et Santé & social 25 %, Éducation (École) et Commerce & ateliers 40 %, Culture & loisirs (Musée) et Sport 30 %, défaut 30 % (hypothèses modèle à valider). Quantités, coûts, économies et carbone gris de la façade et des fenêtres en découlent ; la part est affichée sur la ligne de mesure. Auparavant : 0,8 de façade opaque et 0,2 de fenêtres pour tous les usages.
 - Profondeur de rénovation selon la raison de rénover (`src/model.ts`, `DEEP_RENOVATION_CONDITION = 0.7`) : rénovation complète si l'indice d'état de l'année des travaux est inférieur à 0,70 ; sinon rénovation énergétique (chauffage, photovoltaïque, toit et cave, sans façade ni fenêtres ; état inchangé), escaladée en complète si elle laisse un seuil en vigueur dépassé d'ici 2036 (tableau de bord) ou 2050 (rapport). `renovationFor(building, year, strategy, lastYear)` renvoie la profondeur, son motif et le paquet recommandé, utilisé par les KPI, le tri, la fiche bâtiment, l'export CSV, `BuildingCharts` et la feuille de route du rapport. L'onglet « Mesures de rénovation » part du paquet recommandé (bouton « Paquet recommandé », « Tout cocher » inchangé).
