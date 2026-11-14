@@ -238,3 +238,5 @@ data/
 *.geojson
 public/data/
 src/buildings.generated.json
+
+.vite/

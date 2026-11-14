@@ -6,7 +6,7 @@ import {
   programMetrics, renovationFor, selectProgram, thresholdsAt, triggeredCriteria, validateStrategy,
 } from './model';
 import type { Building, Strategy } from './model';
-import { CARRIERS, ELECTRICITY_EMISSION, ELEMENT_RATIO, EMBODIED, insulationEmbodied, HEAT_PUMP_COP, MEASURE_IDS, PV, RENT, SOCIAL_CARBON_COST, WINDOW_SHARE, annuity, carbonFromIdc, districtHeatingCost, elementRatios, heatPumpCost, planRenovation, windowShareFor } from './renovation';
+import { CARRIERS, ELECTRICITY_EMISSION, ELEMENT_RATIO, EMBODIED, insulationEmbodied, HEAT_PUMP_COP, MEASURE_IDS, PV, RENT, SOCIAL_CARBON_COST, WINDOW_SHARE, annuity, carbonFromIdc, districtHeatingCost, elementRatios, energyPrice, ELECTRICITY_PRICE_FACTOR, heatPumpCost, planRenovation, windowShareFor } from './renovation';
 
 const building: Building = {
   id: 'TEST-1',
@@ -376,7 +376,10 @@ describe('Rénovation et indicateurs', () => {
     expect(before.total).toBeCloseTo(before.energyCost + before.carbonCost);
     expect(after.renovationCost).toBeCloseTo(measures.reduce((sum, m) => sum + m.annualCost, 0));
     expect(after.total).toBeCloseTo(after.energyCost + after.renovationCost + after.carbonCost);
-    expect(before.energyCost).toBeCloseTo(400 / 3.6 * 1000 * 0.09);
+    expect(before.energyCost).toBeCloseTo(400 / 3.6 * 1000 * energyPrice('Gaz'));
+    expect(energyPrice('Gaz')).toBeCloseTo(0.109);
+    expect(energyPrice('Mazout')).toBeCloseTo(0.112);
+    expect(energyPrice('Électrique')).toBeCloseTo(0.275 * ELECTRICITY_PRICE_FACTOR);
   });
 
   it('pondère les moyennes par surface sur le même périmètre avant/après', () => {
