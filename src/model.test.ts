@@ -6,7 +6,7 @@ import {
   programMetrics, renovationFor, selectProgram, thresholdsAt, triggeredCriteria, validateStrategy,
 } from './model';
 import type { Building, Strategy } from './model';
-import { CARRIERS, ELECTRICITY_EMISSION, ELEMENT_RATIO, EMBODIED, insulationEmbodied, HEAT_PUMP_COP, MEASURE_IDS, PV, RENT, VALUE_UPLIFT, SOCIAL_CARBON_COST, WINDOW_SHARE, annuity, valueUpliftFactor, carbonFromIdc, districtHeatingCost, elementRatios, heatPumpCost, planRenovation, windowShareFor } from './renovation';
+import { CARRIERS, ELECTRICITY_EMISSION, ELEMENT_RATIO, EMBODIED, insulationEmbodied, HEAT_PUMP_COP, MEASURE_IDS, PV, RENT, VALUE_UPLIFT, SOCIAL_CARBON_COST, WINDOW_SHARE, annuity, valueUpliftFactor, carbonFromIdc, districtHeatingCost, elementRatios, energyPrice, ELECTRICITY_PRICE_FACTOR, heatPumpCost, planRenovation, windowShareFor } from './renovation';
 
 const building: Building = {
   id: 'TEST-1',
@@ -28,9 +28,10 @@ const FIXED: Strategy = { id: 'conservative', name: 'Seuils fixes', thresholds: 
 
 describe('Déclenchement et calendrier', () => {
   it('utilise les seuils validés par le cahier des charges', () => {
-    expect(PRESETS.conservative.thresholds).toEqual({ condition: 0.5, idc: 800, carbon: 59 });
+    expect(BASE_YEAR).toBe(2027);
+    expect(DASHBOARD_LAST_YEAR).toBe(2037);
+    expect(PRESETS.conservative.thresholds).toEqual({ condition: 0.5, idc: 650, carbon: 48 });
     expect(PRESETS.conservative.changes).toEqual([
-      { year: 2027, thresholds: { condition: 0.5, idc: 650, carbon: 48 } },
       { year: 2031, thresholds: { condition: 0.5, idc: 550, carbon: 41 } },
     ]);
     expect(PRESETS.ambitious.thresholds).toEqual({ condition: 0.5, idc: 450, carbon: 25 });
@@ -401,7 +402,10 @@ describe('Rénovation et indicateurs', () => {
     expect(before.total).toBeCloseTo(before.energyCost + before.carbonCost);
     expect(after.renovationCost).toBeCloseTo(measures.reduce((sum, m) => sum + m.annualCost, 0));
     expect(after.total).toBeCloseTo(after.energyCost + after.renovationCost + after.carbonCost);
-    expect(before.energyCost).toBeCloseTo(400 / 3.6 * 1000 * 0.09);
+    expect(before.energyCost).toBeCloseTo(400 / 3.6 * 1000 * energyPrice('Gaz'));
+    expect(energyPrice('Gaz')).toBeCloseTo(0.109);
+    expect(energyPrice('Mazout')).toBeCloseTo(0.112);
+    expect(energyPrice('Électrique')).toBeCloseTo(0.275 * ELECTRICITY_PRICE_FACTOR);
   });
 
   it('pondère les moyennes par surface sur le même périmètre avant/après', () => {
@@ -427,6 +431,35 @@ describe('Rénovation et indicateurs', () => {
     const empty = programMetrics([], FIXED);
     expect(Object.values(empty).every(Number.isFinite)).toBe(true);
     expect(programMetrics([safe], FIXED)).toEqual(empty);
+  });
+
+  it('calcule les moyennes sur tout le parc en conservant les bâtiments sans travaux', () => {
+    const renovated = { ...building, id: 'works', area: 100, idc: 700, condition: 0.4, carbonIntensity: 50 };
+    const untouched = { ...building, id: 'unchanged', area: 900, idc: 200, condition: 0.9, carbonIntensity: 5 };
+    const program = [assessBuilding(renovated, FIXED)];
+    const renovation = renovationFor(renovated, BASE_YEAR, FIXED);
+    const metrics = programMetrics(program, FIXED, DASHBOARD_LAST_YEAR, [renovated, untouched]);
+    expect(metrics).toMatchObject({ count: 1, area: 100, portfolioCount: 2, portfolioArea: 1000 });
+    expect(metrics.idcBefore).toBeCloseTo(250);
+    expect(metrics.idcAfter).toBeCloseTo((renovation.idcAfter * 100 + 200 * 900) / 1000);
+    expect(metrics.conditionBefore).toBeCloseTo(0.85);
+    expect(metrics.conditionAfter).toBeCloseTo((renovation.conditionAfter * 100 + 0.9 * 900) / 1000);
+    expect(metrics.cost).toBeCloseTo(renovation.cost);
+    expect(metrics.carbonSaved).toBeCloseTo(renovation.carbonSaved);
+    expect(metrics.carbonReduction).toBeCloseTo(renovation.carbonSaved / 9.5);
+  });
+
+  it('affiche les moyennes du parc sans gain quand la sélection est vide ou sous surveillance', () => {
+    const stock = [{ ...building, annualDecay: 0 }];
+    const empty = programMetrics([], FIXED, DASHBOARD_LAST_YEAR, stock);
+    expect(empty).toMatchObject({
+      count: 0, cost: 0, carbonSaved: 0, carbonReduction: 0, portfolioCount: 1,
+      idcBefore: 400, idcAfter: 400, conditionBefore: 0.9, conditionAfter: 0.9,
+    });
+    const safe = assessBuilding(stock[0]!, FIXED);
+    expect(safe.cohort).toBe('safe');
+    expect(programMetrics([safe], FIXED, DASHBOARD_LAST_YEAR, stock)).toEqual(empty);
+    expect(Object.values(programMetrics([], FIXED, DASHBOARD_LAST_YEAR, [])).every(Number.isFinite)).toBe(true);
   });
 
   it('reste fini et cohérent pour tout le parc de démonstration', () => {

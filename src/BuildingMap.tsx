@@ -112,7 +112,7 @@ function shapeRing(shape: [number, number][], lng: number, lat: number, r: numbe
   return [[...ring, ring[0]!]];
 }
 
-/** Infobulle : affectation, catégorie et premier dépassement (année, critère, seuil), y compris après 2036 pour le gris. */
+/** Infobulle : affectation, catégorie et premier dépassement, y compris au-delà de l'horizon du tableau de bord. */
 const popupInfo = (item: Assessment) => [item.building.use, COHORTS[item.cohort].short, describeDue(item)].filter(Boolean).join(' · ');
 
 function toPins(assessments: Assessment[]) {

@@ -76,11 +76,44 @@ const EFFICIENCY: Record<string, number> = {
   'Gaz': 0.85, 'Mazout': 0.80, 'Gaz + mazout': 0.83, 'CAD': 0.95, 'Pompe à chaleur': HEAT_PUMP_COP,
   'Électrique': 1, 'Bois / biogaz': 0.80, 'Inconnu': 0.85,
 };
-/** Prix de l'énergie finale en CHF/kWh [LICS2022 Tab. 11, prix 2020, taxe CO₂ de 96 CHF/t incluse]. */
-const PRICE: Record<string, number> = {
-  'Gaz': 0.09, 'Mazout': 0.12, 'Gaz + mazout': 0.105, 'CAD': 0.088, 'Pompe à chaleur': 0.237,
-  'Électrique': 0.237, 'Bois / biogaz': 0.09, 'Inconnu': 0.09,
+/**
+ * Taxe CO₂ sur les combustibles fossiles (CHF/tCO₂), moyenne 2022-2026 : 96 CHF/t en 2021, 120 CHF/t depuis 2022 [OFEV, loi sur le CO₂].
+ * Elle est comprise dans le prix payé du gaz et du mazout ; le coût social du carbone s'y ajoute (grisé dans les graphiques).
+ */
+export const CO2_LEVY = 120;
+/**
+ * Prix de l'énergie finale hors taxe CO₂ (CHF/kWh), moyenne des cinq dernières années (2022-2026), pour intégrer la hausse
+ * liée à la guerre en Ukraine et aux tensions au Moyen-Orient (détroit d'Ormuz). Estimations rapprochées de sources publiques
+ * fragmentaires, à vérifier avant tout usage officiel :
+ *  - électricité : médiane ElCom du ménage type H4, TTC : 21.5 (2022), 27.4 (2023), 32.1 (2024), 29.0 (2025), 27.7 (2026) → 27.5 ct/kWh,
+ *    réduite à 75 % pour la Ville (client commercial) → 20.6 ct/kWh ;
+ *  - gaz : tarif moyen SIG, taxe CO₂ comprise : ~11.0 (2022), 11.5 (2023), 11.0 (2024), 11.0 (2025), 10.0 (2026, baisse d'avril) → 10.9 ct/kWh ;
+ *  - mazout : prix moyen OFS pour 3 000-6 000 l, taxe CO₂ comprise, à ~10 kWh/l : 128, 108, 102, 96, ~125 (2026, hausse de l'été) CHF/100 l → 11.2 ct/kWh ;
+ *  - CAD, bois/biogaz : prix LICS2022 Tab. 11 (2020), non réévalués.
+ */
+/**
+ * Prix de l'électricité d'un gros consommateur, en part du prix ménage H4 : la Ville achète comme client commercial (profils ElCom C2-C3,
+ * ~0.7-0.8 × H4). Hypothèse modèle, la série ElCom C2-C3 n'ayant pas été retrouvée.
+ */
+export const ELECTRICITY_PRICE_FACTOR = 0.75;
+const ELECTRICITY_PRICE = 0.275 * ELECTRICITY_PRICE_FACTOR;
+const PRICE_BASE: Record<string, number> = {
+  'Gaz': 0.109 - CO2_LEVY / 1000 * 0.198, 'Mazout': 0.112 - CO2_LEVY / 1000 * 0.265,
+  'CAD': 0.088, 'Pompe à chaleur': ELECTRICITY_PRICE, 'Électrique': ELECTRICITY_PRICE, 'Bois / biogaz': 0.09,
 };
+PRICE_BASE['Gaz + mazout'] = (PRICE_BASE['Gaz']! + PRICE_BASE['Mazout']!) / 2;
+PRICE_BASE['Inconnu'] = PRICE_BASE['Gaz']!;
+const FOSSIL_OR_UNKNOWN = new Set(['Gaz', 'Mazout', 'Gaz + mazout', 'Inconnu']);
+/** Prix de l'énergie finale payé (CHF/kWh) : prix hors taxe + taxe CO₂ × facteur d'émission du combustible fossile. */
+export function energyPrice(heating: string): number {
+  const fossil = FOSSIL_OR_UNKNOWN.has(heating);
+  return (PRICE_BASE[heating] ?? PRICE_BASE['Inconnu']!) + (fossil ? CO2_LEVY / 1000 * carrierOf(heating).emission : 0);
+}
+/** Lignes du tableau des prix pour les hypothèses : [agent, prix hors taxe, taxe CO₂, prix payé] en CHF/kWh. */
+export const ENERGY_PRICE_ROWS = ['Gaz', 'Mazout', 'Électrique', 'CAD', 'Bois / biogaz'].map((h) => {
+  const total = energyPrice(h);
+  return { heating: h, base: PRICE_BASE[h]!, levy: total - PRICE_BASE[h]!, total };
+});
 /** Facteur d'émission de l'électricité du réseau (kgCO₂e/kWh), voir CARRIERS. */
 export const ELECTRICITY_EMISSION = CARRIERS['Pompe à chaleur']!.emission;
 /** Photovoltaïque en toiture [SWISSOLAR2024] : 2 400 CHF/kWc (10-30 kWc, prix 2023), productible 1 050 kWh/kWc·an, 25 ans, entretien ~3 ct/kWh. */
@@ -110,7 +143,6 @@ export const VALUE_UPLIFT = { years: 30, preservingShare: { enveloppe: 0.55, equ
 /** Facteur de plus-value = dépréciation regagnée (1 − indice d'état), borné à [0, 1]. */
 export const valueUpliftFactor = (condition: number) => Math.min(1, Math.max(0, 1 - condition));
 const ELECTRIC_HEATING = new Set(['Pompe à chaleur', 'Électrique']);
-const FOSSIL_OR_UNKNOWN = new Set(['Gaz', 'Mazout', 'Gaz + mazout', 'Inconnu']);
 
 interface EnvelopeSpec {
   id: 'facade' | 'toit' | 'cave' | 'fenetres';
@@ -254,7 +286,7 @@ interface SideInput {
 function sideCosts(building: Building, input: SideInput): Side {
   const { finalKwhPerM2, carbon, heating, envelopeCost = 0, equipmentCost = 0, pvKwh = 0, rentLoss = 0, rentGain = 0, valueGain = 0 } = input;
   const finalKwh = finalKwhPerM2 * building.area;
-  const price = PRICE[heating] ?? 0.09;
+  const price = energyPrice(heating);
   // L'électricité photovoltaïque autoconsommée remplace des imports (prix du réseau) moyennant l'entretien.
   const energyCost = (finalKwh - pvKwh) * price + pvKwh * PV.maintenance;
   const carbonCost = carbon * building.area / 1000 * SOCIAL_CARBON_COST;
