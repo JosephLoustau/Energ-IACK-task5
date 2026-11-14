@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { MapPin, TriangleAlert } from 'lucide-react';
 import Hint from './Hint';
 import { BASE_YEAR, DASHBOARD_LAST_YEAR, DEPTHS, conditionAt, describeBreach, describeDepth, inDashboardProgram, renovationFor } from './model';
@@ -8,7 +8,7 @@ import { DISCOUNT_RATE, ELECTRICITY_EMISSION, EMBODIED, HEAT_PUMP_COP, MEASURE_I
 const fmt = (value: number, digits = 0) => new Intl.NumberFormat('fr-CH', { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value);
 const kchf = (value: number) => value >= 1_000_000 ? `${fmt(value / 1_000_000, 2)} M` : value >= 10_000 ? `${fmt(value / 1000)} k` : fmt(value);
 
-const W = 300, H = 230, M = { top: 26, bottom: 44, left: 12, right: 12 };
+const M = { top: 26, bottom: 44, left: 12, right: 12 };
 const COLUMN = 82;
 
 interface Segment { value: number; className: string; label: string }
@@ -22,13 +22,27 @@ function BarChart({ title, unit, columns, ariaLabel }: {
   const neg = (c: Column) => -c.segments.filter((x) => x.value < 0).reduce((s, x) => s + x.value, 0);
   const maxPos = Math.max(...columns.map(pos), 1e-9);
   const maxNeg = Math.max(...columns.map(neg), 0);
+  // Le graphique occupe toute la place offerte par son cadre (hauteur du panneau des mesures), en conservant des proportions lisibles.
+  const box = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ W: 300, H: 230 });
+  useEffect(() => {
+    const element = box.current;
+    if (!element || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry!.contentRect;
+      if (width > 0 && height > 0) setSize({ W: Math.round(width), H: Math.round(Math.max(height, 200)) });
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  const { W, H } = size;
   const plotTop = M.top, plotBottom = H - M.bottom;
   const unitPx = (plotBottom - plotTop) / (maxPos + maxNeg);
   const zeroY = plotTop + maxPos * unitPx;
   const x = (i: number) => M.left + (W - M.left - M.right) * (0.25 + 0.5 * i) - COLUMN / 2;
   return <figure className="bar-chart">
     <figcaption><strong>{title}</strong><span>{unit}</span></figcaption>
-    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={ariaLabel}>
+    <div className="bar-chart-box" ref={box}><svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" aria-label={ariaLabel}>
       <defs><pattern id="grey-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="#bdbab0" /><line x1="0" y1="0" x2="0" y2="6" stroke="#8d8a80" strokeWidth="2" /></pattern></defs>
       <line x1={M.left} x2={W - M.right} y1={zeroY} y2={zeroY} className="axis" />
       {columns.map((column, i) => {
@@ -54,7 +68,7 @@ function BarChart({ title, unit, columns, ariaLabel }: {
           <text x={x(i) + COLUMN / 2} y={plotBottom + 34} textAnchor="middle" className="bar-label">{column.label}</text>
         </g>;
       })}
-    </svg>
+    </svg></div>
   </figure>;
 }
 
