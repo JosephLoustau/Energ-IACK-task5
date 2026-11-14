@@ -128,7 +128,7 @@ function HorizontalBar({ label, unit, before, after, limit, limitYear, color }: 
   </div>;
 }
 
-function BuildingDetail({ assessment, strategy, onClose }: { assessment: Assessment; strategy: Strategy; onClose: () => void }) {
+function BuildingDetail({ assessment, strategy, onClose, onShowMeasures }: { assessment: Assessment; strategy: Strategy; onClose: () => void; onShowMeasures: () => void }) {
   const { building, dueYear, dueThresholds, dueCondition } = assessment;
   // Le gris peut avoir une année de dépassement au-delà de l'horizon du tableau de bord, sans travaux simulés.
   const renovation = inDashboardProgram(assessment) ? renovationFor(building, dueYear!, strategy, DASHBOARD_LAST_YEAR) : null;
@@ -136,7 +136,7 @@ function BuildingDetail({ assessment, strategy, onClose }: { assessment: Assessm
   const thresholdYear = dueYear ?? TARGET_YEAR;
   const state = COHORTS[assessment.cohort];
   return <section className="detail-card" aria-label={`Fiche de ${building.name}`}>
-    <div className="detail-heading"><div className="detail-icon"><Building2 size={23} /></div><div><small>{building.id} · {building.use}</small><h3>{building.name}</h3><p><MapPin size={13} /> {building.district}{building.destination ? ` · ${building.destination}` : ''}</p></div><button className="icon-button close-detail" aria-label="Fermer la fiche bâtiment" onClick={onClose}><X size={18} /></button></div>
+    <div className="detail-heading"><div className="detail-icon"><Building2 size={23} /></div><div><small>{building.id} · {building.use}</small><h3>{building.name}</h3><p><MapPin size={13} /> {building.district}{building.destination ? ` · ${building.destination}` : ''}</p></div><button className="icon-button measures-detail" aria-label={`Mesures de rénovation de ${building.name}`} title="Mesures de rénovation" onClick={onShowMeasures}><Wrench size={17} /></button><button className="icon-button close-detail" aria-label="Fermer la fiche bâtiment" onClick={onClose}><X size={18} /></button></div>
     <span className={`status-badge ${assessment.cohort}`}>{state.label}{dueYear !== null && (renovation ? ` · ${dueYear}` : ` · 1er dépassement ${dueYear}`)}</span>
     <div className="detail-properties"><span>Surface énergétique<strong>{number(building.area)} m²</strong></span><span>Construction{building.imputed?.includes('year') ? ' (estimée)' : ''}<strong>{building.constructionYear}</strong></span><span>Chauffage actuel<strong>{building.heating}{building.fossil ? ' · fossile' : ''}</strong></span><span>État modélisé {BASE_YEAR}<strong>{number(building.condition, 2)}{building.effectiveAge !== undefined ? ` · âge effectif ${building.effectiveAge} ans` : ''}</strong></span><span>Dégradation simulée<strong>−{number(building.annualDecay, 3)} / an</strong></span>{building.protection && building.protection !== 'none' && <span>Protection patrimoniale<strong>{building.protection}</strong></span>}{building.idcStatus && <span>Statut IDC (OCEN)<strong>{building.idcStatus}</strong></span>}</div>
     <h4>Pourquoi cette priorité ?</h4>
@@ -353,7 +353,7 @@ export default function App() {
                 ? <RenovationTab key={`${selectedAssessment.building.id}|${strategy.id}`} assessment={selectedAssessment} strategy={strategy} onShowOnMap={() => setTab('map')} />
                 : <div className="empty-state"><Wrench size={27} /><h3>Aucun bâtiment sélectionné</h3><p>Choisissez un bâtiment sur la carte, dans le diagramme ou dans la feuille de route (pictogramme <Wrench size={12} />) pour étudier ses mesures de rénovation.</p></div>}</div>}
               {tab !== 'measures' && <Legend counts={counts} cohort={cohort} onCohort={(value) => { setCohort(value); setSelected(null); }} useCounts={useCounts} uses={uses} onToggleUse={toggleUse} onClearUses={() => setUses(new Set())} onResetFilters={resetFilters} />}
-              {tab !== 'measures' && selectedAssessment && <div className="detail-float"><BuildingDetail assessment={selectedAssessment} strategy={strategy} onClose={() => setSelected(null)} /></div>}
+              {tab !== 'measures' && selectedAssessment && <div className="detail-float"><BuildingDetail assessment={selectedAssessment} strategy={strategy} onClose={() => setSelected(null)} onShowMeasures={() => setTab('measures')} /></div>}
             </div>
           </section>
 

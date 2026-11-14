@@ -225,12 +225,13 @@ tbody tr:hover { background: #fffaf0; }
 
 /* Fiche bâtiment */
 .detail-card { padding: 16px; }
-.detail-heading { display: flex; gap: 10px; align-items: center; position: relative; padding-right: 18px; }
+.detail-heading { display: flex; gap: 10px; align-items: center; position: relative; padding-right: 46px; }
 .detail-icon { background: var(--yellow); height: 40px; width: 40px; border-radius: 8px; display: grid; place-items: center; color: var(--black); flex-shrink: 0; }
 .detail-heading small { font-size: 9px; color: var(--muted); }
 .detail-heading h3 { font-size: 14px; margin-top: 3px; }
 .detail-heading p { display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 10px; margin-top: 3px; }
 .close-detail { position: absolute; right: -6px; top: -6px; }
+.measures-detail { position: absolute; right: 22px; top: -6px; }
 .status-badge { display: inline-block; background: var(--status-bg); color: var(--status-color); font-size: 10px; font-weight: 600; padding: 6px 8px; border-radius: 4px; margin-top: 14px; border: 1px solid var(--status-color); }
 .detail-properties { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 14px 0; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
 .detail-properties span { font-size: 9px; color: var(--muted); }
