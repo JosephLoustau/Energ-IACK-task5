@@ -4,14 +4,47 @@
 
 Application web d'aide à la décision pour prioriser la rénovation et la
 décarbonation d'un parc municipal. Première version fonctionnelle avec
-les **770 bâtiments de la Ville de Genève** (SITG / QuantHome, `ville_geneve_core.geojson`), sans accès API ni chatbot. Régénérer les données : `npm run data`.
+les **770 bâtiments de la Ville de Genève** (SITG / QuantHome / QBuildings). Les données
+ne sont pas versionnées : chacun les génère localement avec ses propres identifiants
+(voir [Données](#données)).
+
+### Données
+
+Aucune donnée n'est commitée (`data/`, `*.geojson` et `src/buildings.generated.json`
+sont ignorés par Git). Elles sont produites en deux étapes :
+
+1. `npm run data:fetch` — [pipeline/stock.py](./pipeline/stock.py) interroge SITG,
+   QuantHome et QBuildings et écrit `data/ville_geneve_core.geojson`
+   (réponses brutes en cache dans `data/cache/`).
+2. `npm run data:build` — [scripts/build-buildings.mjs](./scripts/build-buildings.mjs)
+   convertit ce GeoJSON en `src/buildings.generated.json`, lu par l'application.
+
+`npm run data` enchaîne les deux. Prérequis :
+
+- Python 3.11+ ;
+- un fichier `.env` à la racine, copié depuis [.env.example](./.env.example), avec
+  votre clé QuantHome (`API_KEY`) et vos accès QBuildings (`QBUILDINGS_*`).
+  Le `.env` est ignoré par Git : ne jamais le commiter ni le partager.
+
+```powershell
+copy .env.example .env        # puis renseigner les identifiants
+python -m venv .venv
+.venv\Scripts\activate        # Linux/macOS : source .venv/bin/activate
+pip install -r pipeline/requirements.txt
+npm run data
+```
+
+Le modèle de données et la provenance des attributs sont décrits dans
+[docs/data_model.html](./docs/data_model.html).
 
 ### Lancer l'application
 
-Prérequis : Node.js 22.12+ ou une version LTS ultérieure compatible avec Vite.
+Prérequis : Node.js 22.12+ ou une version LTS ultérieure compatible avec Vite,
+et les données générées (voir ci-dessus).
 
 ```powershell
 npm ci
+npm run data   # première fois, ou pour rafraîchir les données
 npm run dev
 ```
 
@@ -100,7 +133,8 @@ Voir le [cahier des charges](./CAHIER-DES-CHARGES.md) et le panneau
 ### Organisation
 
 - [Moteur métier](./src/model.ts) : seuils annuels, priorités et KPI.
-- [Données fictives](./src/data.ts) : génération déterministe.
+- [Données](./src/data.ts) : parc réel généré localement, plus un générateur fictif déterministe.
+- [Pipeline de données](./pipeline/) : sourcing SITG / QuantHome / QBuildings.
 - [Tableau de bord](./src/App.tsx) et [carte](./src/BuildingMap.tsx).
 - [Tests métier](./src/model.test.ts).
 - [Transcriptions de cadrage](./transcripts/transcripts.zip).
@@ -119,4 +153,4 @@ reportées à une étape dédiée. Avant cette étape :
 4. Charger un calendrier de seuils **vérifié et sourcé** ; ne pas déduire
    les obligations applicables d'une transcription orale.
 5. Traiter explicitement les données manquantes et leur qualité, sans
-   leur substituer silencieusement des données fictives.
+   leur substituer silencieusement des données fictives.

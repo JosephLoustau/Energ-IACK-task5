@@ -224,3 +224,11 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 .DS_Store
+
+# local only
+context.md
+
+# Données générées localement (jamais commitées)
+data/
+*.geojson
+src/buildings.generated.json

@@ -4,7 +4,11 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "data": "node scripts/build-buildings.mjs",
+    "data": "npm run data:fetch && npm run data:build",
+    "data:fetch": "python pipeline/stock.py",
+    "data:build": "node scripts/build-buildings.mjs",
+    "predev": "node scripts/check-data.mjs",
+    "prebuild": "node scripts/check-data.mjs",
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1",
