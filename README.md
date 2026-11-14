@@ -1,6 +1,6 @@
 # Energ-IACK-task5
 
-## StratoRéno — Trajectoire Genève
+## DeCathlon Genève — 10 ans pour renforcer le parc bâti
 
 Application web d'aide à la décision pour prioriser la rénovation et la
 décarbonation d'un parc municipal. Première version fonctionnelle avec
