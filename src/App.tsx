@@ -111,29 +111,11 @@ function FutureThresholds({ strategy, onChange }: { strategy: Strategy; onChange
   </div>;
 }
 
-/** Barre horizontale actuel / rénové avec repère du seuil ; les valeurs sont dans l'infobulle et le texte alternatif. */
-function HorizontalBar({ label, unit, before, after, limit, limitYear, color }: {
-  label: string; unit: string; before: number; after: number | undefined; limit: number; limitYear: number; color: string;
-}) {
-  const max = Math.max(before, after ?? 0, limit) * 1.1 || 1;
-  const pct = (value: number) => `${Math.min(100, value / max * 100)}%`;
-  const text = `${label} : ${number(before, before < 10 ? 1 : 0)} ${unit}${after !== undefined ? `, après rénovation ${number(after, after < 10 ? 1 : 0)}` : ''} ; seuil ${limitYear} : ${number(limit, limit < 10 ? 1 : 0)}`;
-  return <div className="hbar" role="img" aria-label={text} title={text}>
-    <span className="hbar-label">{label} <small>{unit} · seuil {limitYear}</small></span>
-    <div className="hbar-track">
-      <div className="hbar-fill" style={{ width: pct(before), background: color }} />
-      {after !== undefined && <div className="hbar-fill after" style={{ width: pct(after) }} />}
-      <div className="hbar-limit" style={{ left: pct(limit) }} />
-    </div>
-  </div>;
-}
-
 function BuildingDetail({ assessment, strategy, onClose }: { assessment: Assessment; strategy: Strategy; onClose: () => void }) {
   const { building, dueYear, dueThresholds, dueCondition } = assessment;
   // Le gris peut avoir une année de dépassement au-delà de l'horizon du tableau de bord, sans travaux simulés.
   const renovation = inDashboardProgram(assessment) ? renovationFor(building, dueYear!, strategy, DASHBOARD_LAST_YEAR) : null;
   const due = describeDue(assessment);
-  const thresholdYear = dueYear ?? TARGET_YEAR;
   const state = COHORTS[assessment.cohort];
   return <section className="detail-card" aria-label={`Fiche de ${building.name}`}>
     <div className="detail-heading"><div className="detail-icon"><Building2 size={23} /></div><div><small>{building.id} · {building.use}</small><h3>{building.name}</h3><p><MapPin size={13} /> {building.district}{building.destination ? ` · ${building.destination}` : ''}</p></div><button className="icon-button close-detail" aria-label="Fermer la fiche bâtiment" onClick={onClose}><X size={18} /></button></div>
@@ -147,8 +129,8 @@ function BuildingDetail({ assessment, strategy, onClose }: { assessment: Assessm
     </ul> : <p className="muted-text">Aucun seuil dépassé jusqu’en {DASHBOARD_LAST_YEAR}{due ? ` ; ${due} (seuils en vigueur cette année-là).` : ` ni jusqu’en ${TARGET_YEAR}.`} Surveillance recommandée, sans travaux simulés.</p>}
     <h4>{renovation ? `${DEPTHS[renovation.depth].label} simulée en ${dueYear}` : 'État actuel'}</h4>
     <div className="before-after">
-      <HorizontalBar label="IDC" unit="MJ/m²/an" before={building.idc} after={renovation?.idcAfter} limit={dueThresholds.idc} limitYear={thresholdYear} color={state.color} />
-      <HorizontalBar label="CO₂" unit="kg/m²/an" before={building.carbonIntensity} after={renovation?.carbonAfter} limit={dueThresholds.carbon} limitYear={thresholdYear} color={state.color} />
+      <div><span>IDC <small>MJ/m²/an</small></span><strong>{number(building.idc)}{renovation && <><ArrowRight size={13} />{number(renovation.idcAfter)}</>}</strong></div>
+      <div><span>Intensité carbone <small>kg/m²/an</small></span><strong>{number(building.carbonIntensity, 1)}{renovation && <><ArrowRight size={13} />{number(renovation.carbonAfter, 1)}</>}</strong></div>
       <div><span>Indice d’état</span><strong>{number(renovation?.conditionBefore ?? building.condition, 2)}{renovation && <><ArrowRight size={13} />{number(renovation.conditionAfter, 2)}</>}</strong></div>
     </div>
     {renovation && <><div className="detail-investment"><span>Investissement estimé<strong>{money(renovation.cost)} CHF</strong></span><span>CO₂ évité chaque année<strong>{number(renovation.carbonSaved, 1)} tCO₂e</strong></span><span>Carbone gris des travaux<strong>{number(renovation.embodiedCarbon, 1)} tCO₂e</strong></span></div>

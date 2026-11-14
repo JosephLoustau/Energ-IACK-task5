@@ -390,15 +390,6 @@ i.seg-carbon { background: repeating-linear-gradient(45deg, #bdbab0 0 3px, #8d8a
 .measures-total strong { font: 800 15px 'Manrope', sans-serif; }
 .costs-panel .charts-legend { margin-bottom: 6px; }
 .row-actions { white-space: nowrap; text-align: right; }
-.hbar { display: grid; grid-template-columns: 74px 1fr; gap: 8px; align-items: center; padding: 8px; background: #faf8f1; }
-.hbar-label { font-size: 10px; color: var(--muted); }
-.hbar-label small { font-size: 8px; display: block; }
-.hbar-track { position: relative; height: 16px; background: #ebe8de; border-radius: 3px; border: 1px solid var(--black); overflow: hidden; }
-.hbar-fill { position: absolute; left: 0; top: 0; height: 100%; }
-.hbar-fill.after { top: 50%; height: 50%; background: #1e5b3a; border-top: 1px solid var(--black); }
-.hbar-limit { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--black); }
 @media (max-width: 900px) { .renovation-body { grid-template-columns: 1fr; } }
-.before-after > .hbar { display: grid; grid-template-columns: 74px 1fr; justify-content: stretch; }
-.hbar-track { min-width: 0; }
 .map-warning.blocks { bottom: 52px; }
 .map-warning code { background: #fff; padding: 0 4px; border-radius: 3px; }
