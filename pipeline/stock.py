@@ -1,16 +1,20 @@
 """Building stock owned by a public body (default: Ville de Genève).
 
 Reference list = SITG land registry: buildings on parcels owned by `owner`, excluding buildings under a
-third-party DDP and unheated buildings. Enriched with SITG, QuantHome and QBuildings. QuantHome ownership is never used.
+third-party DDP and unheated buildings. Enriched with SITG, QuantHome and (optionally) QBuildings.
+QuantHome ownership is never used.
 """
 import json
+import os
 import re
+import sys
 import time
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from dotenv import load_dotenv
 from shapely.geometry import shape
 from shapely.geometry.polygon import orient
 from shapely.strtree import STRtree
@@ -224,8 +228,11 @@ class CityStock:
         self._qh = self._qh or QuantHomeClient(timeout=180, max_retries=6)
         return self._qh
 
+    def _cache_path(self, name: str) -> Path:
+        return self.cache / f"{re.sub(r'\W+', '_', self.owner)}_{name}.json"
+
     def _cached(self, name: str, fn, refresh: bool):
-        path = self.cache / f"{re.sub(r'\W+', '_', self.owner)}_{name}.json"
+        path = self._cache_path(name)
         if path.exists() and not refresh:
             return json.loads(path.read_text())
         data = fn()
@@ -440,7 +447,17 @@ class CityStock:
                             ("retrofit_cost_ratio", "estimated_eco_retrofit_ratio")):
                 b.fill(attr, val(r, k), E, q(k), "QuantHome model")
 
+    QB_ENV = ("QBUILDINGS_HOST", "QBUILDINGS_PORT", "QBUILDINGS_DB", "QBUILDINGS_USER", "QBUILDINGS_PASSWORD")
+
     def _enrich_qbuildings(self, refresh):
+        """Optional last-resort IDC estimate: skipped when QBUILDINGS_* are not set (and no cache exists)."""
+        load_dotenv()
+        cached = self._cache_path("qbuildings").exists() and not refresh
+        if not cached and not all(os.environ.get(k) for k in self.QB_ENV):
+            print("QBuildings: QBUILDINGS_* not set in .env, step skipped "
+                  "(last-resort IDC estimate for a handful of buildings).", file=sys.stderr)
+            self.log["qbuildings_skipped"] = 1
+            return
         egids = list(self.buildings)
         rows = self._cached("qbuildings", lambda: QBuildingsClient().blocks_for(egids, self.QB_COLUMNS), refresh)
         for r in rows:

@@ -14,7 +14,7 @@ Aucune donnée n'est commitée (`data/`, `*.geojson` et `src/buildings.generated
 sont ignorés par Git). Elles sont produites en deux étapes :
 
 1. `npm run data:fetch` — [pipeline/stock.py](./pipeline/stock.py) interroge SITG,
-   QuantHome et QBuildings et écrit `data/ville_geneve_core.geojson`
+   QuantHome et, si configuré, QBuildings, puis écrit `data/ville_geneve_core.geojson`
    (réponses brutes en cache dans `data/cache/`).
 2. `npm run data:build` — [scripts/build-buildings.mjs](./scripts/build-buildings.mjs)
    convertit ce GeoJSON en `src/buildings.generated.json`, lu par l'application.
@@ -23,7 +23,9 @@ sont ignorés par Git). Elles sont produites en deux étapes :
 
 - Python 3.11+ ;
 - un fichier `.env` à la racine, copié depuis [.env.example](./.env.example), avec
-  votre clé QuantHome (`API_KEY`) et vos accès QBuildings (`QBUILDINGS_*`).
+  votre clé QuantHome (`API_KEY`, obligatoire). Les accès QBuildings
+  (`QBUILDINGS_*`) sont optionnels : ils ne servent qu'à estimer l'IDC d'une
+  dizaine de bâtiments sans autre source ; sans eux, l'étape est sautée.
   Le `.env` est ignoré par Git : ne jamais le commiter ni le partager.
 
 ```powershell
