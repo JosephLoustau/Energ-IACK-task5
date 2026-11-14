@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { MapPin, TriangleAlert } from 'lucide-react';
 import Hint from './Hint';
-import { BASE_YEAR, DASHBOARD_LAST_YEAR, DEPTHS, describeBreach, describeDepth, inDashboardProgram, renovationFor } from './model';
+import { BASE_YEAR, DASHBOARD_LAST_YEAR, DEPTHS, conditionAt, describeBreach, describeDepth, inDashboardProgram, renovationFor } from './model';
 import type { Assessment, Strategy } from './model';
-import { DISCOUNT_RATE, ELECTRICITY_EMISSION, EMBODIED, HEAT_PUMP_COP, MEASURE_IDS, PV, REALIZED_SHARE, RENT, SOCIAL_CARBON_COST, planRenovation } from './renovation';
+import { DISCOUNT_RATE, ELECTRICITY_EMISSION, EMBODIED, HEAT_PUMP_COP, MEASURE_IDS, PV, REALIZED_SHARE, RENT, SOCIAL_CARBON_COST, VALUE_UPLIFT, planRenovation } from './renovation';
 
 const fmt = (value: number, digits = 0) => new Intl.NumberFormat('fr-CH', { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value);
 const kchf = (value: number) => value >= 1_000_000 ? `${fmt(value / 1_000_000, 2)} M` : value >= 10_000 ? `${fmt(value / 1000)} k` : fmt(value);
@@ -62,16 +62,19 @@ export default function RenovationTab({ assessment, strategy, onShowOnMap }: { a
   const recommended = renovationFor(building, worksYear, strategy, DASHBOARD_LAST_YEAR);
   const [selection, setSelection] = useState<Set<string>>(() => new Set(recommended.selection));
   const isRecommended = selection.size === recommended.selection.size && [...selection].every((id) => recommended.selection.has(id));
-  const plan = planRenovation(building, selection);
+  const plan = planRenovation(building, selection, conditionAt(building, worksYear));
   const { before, after } = plan;
   const toggle = (id: string) => setSelection((current) => { const next = new Set(current); if (!next.delete(id)) next.add(id); return next; });
+  // Coût net : coûts + loyers non perçus − hausse de loyer − plus-value annualisée (recettes).
+  const netCost = (side: typeof before) => side.total + side.rentLoss - side.rentGain - side.valueGain;
   const costSegments = (side: typeof before): Segment[] => [
     { value: side.energyCost, className: 'seg-energy', label: 'Énergie' },
     { value: side.envelopeCost, className: 'seg-envelope', label: 'Enveloppe thermique (annualisée)' },
     { value: side.equipmentCost, className: 'seg-equipment', label: 'Équipements techniques (annualisés)' },
     { value: side.carbonCost, className: 'seg-carbon', label: 'Émissions carbone' },
-    { value: side.rentGain, className: 'seg-rent-gain', label: 'Hausse de loyer (confort)' },
-    { value: -side.rentLoss, className: 'seg-rent-loss', label: 'Manque à gagner de loyers (annualisé)' },
+    { value: side.rentLoss, className: 'seg-rent-loss', label: 'Manque à gagner de loyers (annualisé)' },
+    { value: -side.rentGain, className: 'seg-rent-gain', label: 'Hausse de loyer (confort)' },
+    { value: -side.valueGain, className: 'seg-value-gain', label: 'Plus-value immobilière (annualisée)' },
   ];
   const included = plan.measures.filter((m) => m.included);
   const carbonSavedPerYear = (before.carbon - after.carbon) * building.area / 1000;
@@ -108,17 +111,18 @@ export default function RenovationTab({ assessment, strategy, onShowOnMap }: { a
         <div className="measures-total"><span>{included.length} mesure{included.length > 1 ? 's' : ''} retenue{included.length > 1 ? 's' : ''}</span><strong>{fmt(plan.capex)} CHF</strong><span>{fmt(after.renovationCost)} CHF/an</span></div>
       </div>
       <div className="costs-panel">
-        <div className="charts-legend" aria-hidden="true"><span><i className="seg-energy" />Énergie</span><span><i className="seg-envelope" />Enveloppe thermique</span><span><i className="seg-equipment" />Équipements techniques</span><span><i className="seg-carbon" />Carbone ({SOCIAL_CARBON_COST} CHF/tCO₂)</span><span><i className="seg-rent-gain" />Hausse de loyer (+)</span><span><i className="seg-rent-loss" />Manque à gagner (−)</span></div>
-        <BarChart title="Coûts annuels" unit="CHF/an" ariaLabel="Coûts annuels actuels et rénovés : énergie, enveloppe, équipements, carbone et loyers"
-          negativeLabel={(column) => column.label === 'Rénové' ? `−${kchf(after.rentLoss)}` : ''} columns={[
-            { label: 'Actuel', total: `${kchf(before.total)} CHF`, segments: costSegments(before) },
-            { label: 'Rénové', total: `${kchf(after.total + after.rentGain)} CHF`, segments: costSegments(after) },
+        <div className="charts-legend" aria-hidden="true"><span><i className="seg-energy" />Énergie</span><span><i className="seg-envelope" />Enveloppe thermique</span><span><i className="seg-equipment" />Équipements techniques</span><span><i className="seg-carbon" />Carbone ({SOCIAL_CARBON_COST} CHF/tCO₂)</span><span><i className="seg-rent-loss" />Manque à gagner</span><span><i className="seg-rent-gain" />Hausse de loyer</span><span><i className="seg-value-gain" />Plus-value</span></div>
+        <BarChart title="Coûts annuels" unit="CHF/an" ariaLabel="Coûts annuels actuels et rénovés : énergie, enveloppe, équipements, carbone, loyers et plus-value"
+          negativeLabel={(column) => column.label === 'Rénové' ? `−${kchf(after.rentGain + after.valueGain)}` : ''} columns={[
+            { label: 'Actuel', total: `${kchf(netCost(before))} CHF`, segments: costSegments(before) },
+            { label: 'Rénové', total: `${kchf(netCost(after))} CHF`, segments: costSegments(after) },
           ]} />
       </div>
     </div>
     <p className="pv-note">Carbone gris des mesures retenues : {fmt(plan.embodied.total / 1000, 1)} tCO₂e, soit {fmt(plan.embodied.perM2Year, 1)} kgCO₂e/m²·an amorti sur la durée de vie des mesures (valeur limite des rénovations importantes dès 2034 : {EMBODIED.legalLimitPerM2Year} kgCO₂e/m²·an, RECMC){carbonSavedPerYear > 0 ? ` ; compensé en ${fmt(plan.embodied.total / 1000 / carbonSavedPerYear, 1)} ans par le CO₂ d’exploitation évité` : ''}.</p>
+    {plan.value.gain > 0 && <p className="pv-note">Plus-value immobilière : {fmt(plan.value.gain)} CHF, soit la dépréciation regagnée ({fmt(plan.value.factor * 100)} % = 1 − état {fmt(plan.value.condition, 2)}) sur la valeur à neuf des éléments remplacés ({fmt(plan.value.replaced)} CHF, part du coût des mesures préservant la valeur) ; annualisée : {fmt(plan.value.annual)} CHF/an.</p>}
     {plan.rent.base === 0 && <p className="pv-note">Aucun loyer résidentiel renseigné pour ce bâtiment : pas de composante loyers.</p>}
     {plan.pv.reason && <p className={`pv-note ${plan.pv.blocked ? 'blocked' : ''}`}><TriangleAlert size={14} /> {plan.pv.reason}</p>}
-    <p className="measures-note">Hypothèses de calcul <Hint label="Hypothèses de calcul">Subventions non appliquées : cette feuille de route est établie pour la Ville de Genève elle-même, maître d’ouvrage et propriétaire des bâtiments. Prix 2020 hors subventions ; annuité à {fmt(DISCOUNT_RATE * 100, 0)} % ; économies d’enveloppe théoriques réalisées à {fmt(REALIZED_SHARE * 100, 0)} % ; PAC air/eau COP {HEAT_PUMP_COP} ; surfaces d’éléments déduites de la SRE (hypothèse modèle) : façade brute 1,0 m²/m² SRE, fenêtres = part vitrée de l’affectation × façade brute (Logement 20 %, Administration 60 %, autres affectations : hypothèses modèle) ; paquet recommandé selon la vétusté (rénovation complète si l’état est inférieur à 0,70, sinon énergétique sans façade ni fenêtres, sauf seuil encore dépassé) ; coût social du carbone {SOCIAL_CARBON_COST} CHF/tCO₂ ; électricité {ELECTRICITY_EMISSION} kgCO₂/kWh ; PV {fmt(PV.costPerKwc)} CHF/kWc, {fmt(PV.yield)} kWh/kWc ; loyers : {RENT.lossYears} an de loyers perdu réparti sur {RENT.spreadYears} ans, hausse de confort +{fmt(RENT.comfortUplift * 100)} %, appliqués dès qu’une mesure d’enveloppe est retenue. Détail : docs/renovation/.</Hint></p>
+    <p className="measures-note">Hypothèses de calcul <Hint label="Hypothèses de calcul">Subventions non appliquées : cette feuille de route est établie pour la Ville de Genève elle-même, maître d’ouvrage et propriétaire des bâtiments. Coûts d’investissement 2020 hors subventions ; prix de l’énergie moyens 2022-2026, taxe CO₂ comprise pour le gaz et le mazout (voir Hypothèses) ; annuité à {fmt(DISCOUNT_RATE * 100, 0)} % ; économies d’enveloppe théoriques réalisées à {fmt(REALIZED_SHARE * 100, 0)} % ; PAC air/eau COP {HEAT_PUMP_COP} ; surfaces d’éléments déduites de la SRE (hypothèse modèle) : façade brute 1,0 m²/m² SRE, fenêtres = part vitrée de l’affectation × façade brute (Logement 20 %, Administration 60 %, autres affectations : hypothèses modèle) ; paquet recommandé selon la vétusté (rénovation complète si l’état est inférieur à 0,70, sinon énergétique sans façade ni fenêtres, sauf seuil encore dépassé) ; coût social du carbone {SOCIAL_CARBON_COST} CHF/tCO₂ ; électricité {ELECTRICITY_EMISSION} kgCO₂/kWh ; PV {fmt(PV.costPerKwc)} CHF/kWc, {fmt(PV.yield)} kWh/kWc ; loyers : {RENT.lossYears} an de loyers perdu réparti sur {RENT.spreadYears} ans, hausse de confort +{fmt(RENT.comfortUplift * 100)} %, appliqués dès qu’une mesure d’enveloppe est retenue ; plus-value immobilière = part du coût des mesures préservant la valeur (enveloppe {fmt(VALUE_UPLIFT.preservingShare.enveloppe * 100)} %, chauffage {fmt(VALUE_UPLIFT.preservingShare.equipement * 100)} %, PV 0 %, OFEN/OFL 2019) × (1 − indice d’état de l’année des travaux), dépréciation par l’âge regagnée (méthode de la valeur intrinsèque), annualisée sur {VALUE_UPLIFT.years} ans. Détail : docs/renovation/.</Hint></p>
   </section>;
 }
