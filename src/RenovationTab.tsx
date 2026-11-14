@@ -12,11 +12,11 @@ const W = 300, H = 230, M = { top: 26, bottom: 44, left: 12, right: 12 };
 const COLUMN = 82;
 
 interface Segment { value: number; className: string; label: string }
-interface Column { label: string; segments: Segment[]; total: string }
+interface Column { label: string; segments: Segment[]; total: string; /** Coût net annualisé (somme algébrique des segments), tracé en trait horizontal. */ net: number }
 
 /** Barres empilées : les valeurs positives montent depuis l'axe, les négatives descendent sous l'axe. */
-function BarChart({ title, unit, columns, ariaLabel, negativeLabel }: {
-  title: string; unit: string; columns: [Column, Column]; ariaLabel: string; negativeLabel?: (column: Column) => string;
+function BarChart({ title, unit, columns, ariaLabel }: {
+  title: string; unit: string; columns: [Column, Column]; ariaLabel: string;
 }) {
   const pos = (c: Column) => c.segments.filter((x) => x.value > 0).reduce((s, x) => s + x.value, 0);
   const neg = (c: Column) => -c.segments.filter((x) => x.value < 0).reduce((s, x) => s + x.value, 0);
@@ -47,7 +47,10 @@ function BarChart({ title, unit, columns, ariaLabel, negativeLabel }: {
             return <rect key={segment.label} x={x(i)} y={y} width={COLUMN} height={h} className={segment.className}><title>{tip(segment)}</title></rect>;
           })}
           <text x={x(i) + COLUMN / 2} y={up - 7} textAnchor="middle" className="bar-value">{column.total}</text>
-          {down > zeroY && negativeLabel && <text x={x(i) + COLUMN / 2} y={down + 14} textAnchor="middle" className="bar-value">{negativeLabel(column)}</text>}
+          {down > zeroY && <g className="net-marker"><title>{`Coût total annualisé (net) : ${fmt(column.net)} ${unit}`}</title>
+            <line x1={x(i) - 10} x2={x(i) + COLUMN + 10} y1={zeroY - column.net * unitPx} y2={zeroY - column.net * unitPx} className="net-halo" />
+            <line x1={x(i) - 10} x2={x(i) + COLUMN + 10} y1={zeroY - column.net * unitPx} y2={zeroY - column.net * unitPx} className="net-line" />
+          </g>}
           <text x={x(i) + COLUMN / 2} y={plotBottom + 34} textAnchor="middle" className="bar-label">{column.label}</text>
         </g>;
       })}
@@ -111,11 +114,11 @@ export default function RenovationTab({ assessment, strategy, onShowOnMap }: { a
         <div className="measures-total"><span>{included.length} mesure{included.length > 1 ? 's' : ''} retenue{included.length > 1 ? 's' : ''}</span><strong>{fmt(plan.capex)} CHF</strong><span>{fmt(after.renovationCost)} CHF/an</span></div>
       </div>
       <div className="costs-panel">
-        <div className="charts-legend" aria-hidden="true"><span><i className="seg-energy" />Énergie</span><span><i className="seg-envelope" />Enveloppe thermique</span><span><i className="seg-equipment" />Équipements techniques</span><span><i className="seg-carbon" />Carbone ({SOCIAL_CARBON_COST} CHF/tCO₂)</span><span><i className="seg-rent-loss" />Manque à gagner</span><span><i className="seg-rent-gain" />Hausse de loyer</span><span><i className="seg-value-gain" />Plus-value</span></div>
+        <div className="charts-legend" aria-hidden="true"><span><i className="seg-energy" />Énergie</span><span><i className="seg-envelope" />Enveloppe thermique</span><span><i className="seg-equipment" />Équipements techniques</span><span><i className="seg-carbon" />Carbone ({SOCIAL_CARBON_COST} CHF/tCO₂)</span><span><i className="seg-rent-loss" />Manque à gagner</span><span><i className="seg-rent-gain" />Hausse de loyer</span><span><i className="seg-value-gain" />Plus-value</span><span><i className="net-line" />Coût total annualisé (net)</span></div>
         <BarChart title="Coûts annuels" unit="CHF/an" ariaLabel="Coûts annuels actuels et rénovés : énergie, enveloppe, équipements, carbone, loyers et plus-value"
-          negativeLabel={(column) => column.label === 'Rénové' ? `−${kchf(after.rentGain + after.valueGain)}` : ''} columns={[
-            { label: 'Actuel', total: `${kchf(netCost(before))} CHF`, segments: costSegments(before) },
-            { label: 'Rénové', total: `${kchf(netCost(after))} CHF`, segments: costSegments(after) },
+          columns={[
+            { label: 'Actuel', total: `${kchf(netCost(before))} CHF`, net: netCost(before), segments: costSegments(before) },
+            { label: 'Rénové', total: `${kchf(netCost(after))} CHF`, net: netCost(after), segments: costSegments(after) },
           ]} />
       </div>
     </div>
