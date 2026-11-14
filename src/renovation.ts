@@ -97,13 +97,16 @@ export const RENT = { lossYears: 1, spreadYears: 30, comfortUplift: 0.10 };
 /**
  * Plus-value immobilière : valeur intrinsèque (Realwert/Sachwert) regagnée par la rénovation. Le Neuwert d'un élément
  * est déprécié par l'âge (Altersentwertung = 1 − état de l'élément [SHB_TG2025, § 3.2 et glossaire]) ; renouvelé, il
- * retrouve son Neuwert. Plus-value = Neuwert des éléments renouvelés × (1 − indice d'état de l'année des travaux),
- * avec Neuwert des éléments renouvelés ≈ coût des mesures retenues (hypothèse modèle : la part d'amélioration énergétique
- * du coût est valorisée par les économies d'énergie et la hausse de loyer, déjà comptées, d'où pas de double comptage).
- * Équivaut à une part (1 − état) de la valeur à neuf du bâtiment, au prorata de la part du bâtiment renouvelée.
- * Annualisée à DISCOUNT_RATE sur `years` ans.
+ * retrouve son Neuwert. Plus-value = Neuwert des éléments remplacés × (1 − indice d'état de l'année des travaux).
+ * Neuwert des éléments remplacés = part « préservant la valeur » du coût des mesures (remplacement à l'identique),
+ * moyennes de 20 rénovations importantes réparties par CFC [OFEN_OFL2019, § 4.5] : part créant des plus-values 47 %
+ * (CFC 21) et 44 % (CFC 22) pour l'enveloppe, d'où 0,55 préservant la valeur ; 29 % (CFC 24, CVC) pour le chauffage,
+ * d'où 0,71. Le photovoltaïque est un élément nouveau, sans élément usé à remplacer : 0 (hypothèse modèle).
+ * La part créant des plus-values (amélioration au-delà du standard d'origine) n'est pas comptée ici : c'est elle que le
+ * droit du bail reporte sur les loyers (art. 14 OBLF), et le modèle la valorise déjà par la hausse de loyer et les
+ * économies d'énergie. Annualisée à DISCOUNT_RATE sur `years` ans.
  */
-export const VALUE_UPLIFT = { years: 30 };
+export const VALUE_UPLIFT = { years: 30, preservingShare: { enveloppe: 0.55, equipement: 0.71, pv: 0 } };
 /** Facteur de plus-value = dépréciation regagnée (1 − indice d'état), borné à [0, 1]. */
 export const valueUpliftFactor = (condition: number) => Math.min(1, Math.max(0, 1 - condition));
 const ELECTRIC_HEATING = new Set(['Pompe à chaleur', 'Électrique']);
@@ -240,8 +243,8 @@ export interface RenovationPlan {
   /** Carbone gris des mesures retenues : total (kgCO₂e), amorti sur la durée de vie de chaque mesure (kgCO₂e/an et kgCO₂e/m² SRE·an). */
   embodied: { total: number; annual: number; perM2Year: number };
   rent: { base: number; loss: number; gain: number; net: number };
-  /** Plus-value immobilière : état de l'année des travaux, facteur (1 − état), Neuwert renouvelé (= capex), plus-value (CHF) et annualisée (CHF/an). */
-  value: { condition: number; factor: number; renewed: number; gain: number; annual: number };
+  /** Plus-value immobilière : état de l'année des travaux, facteur (1 − état), Neuwert des éléments remplacés, plus-value (CHF) et annualisée (CHF/an). */
+  value: { condition: number; factor: number; replaced: number; gain: number; annual: number };
 }
 
 interface SideInput {
@@ -383,15 +386,16 @@ export function planRenovation(building: Building, selection?: ReadonlySet<strin
   const loss = worksInside ? base * RENT.lossYears / RENT.spreadYears : 0;
   const gain = worksInside ? base * RENT.comfortUplift : 0;
 
-  // Plus-value : dépréciation regagnée sur le Neuwert des éléments renouvelés (coût des mesures retenues).
+  // Plus-value : dépréciation regagnée sur le Neuwert des éléments remplacés (part préservant la valeur du coût des mesures).
   const factor = valueUpliftFactor(condition);
-  const valueGain = capex * factor;
+  const replaced = included.reduce((sum, m) => sum + m.cost * (m.id === 'pv' ? VALUE_UPLIFT.preservingShare.pv : VALUE_UPLIFT.preservingShare[m.category]), 0);
+  const valueGain = replaced * factor;
   const valueAnnual = valueGain * annuity(VALUE_UPLIFT.years);
   return {
     measures, capex, heatPump, districtHeating, powerKw,
     pv: { kwc: pvOn ? kwc : 0, production, blocked: protectedBuilding, reason },
     rent: { base, loss, gain, net: gain - loss }, embodied,
-    value: { condition, factor, renewed: capex, gain: valueGain, annual: valueAnnual },
+    value: { condition, factor, replaced, gain: valueGain, annual: valueAnnual },
     before: sideCosts(building, { finalKwhPerM2: finalBefore, carbon: building.carbonIntensity, heating: building.heating }),
     after: sideCosts(building, {
       finalKwhPerM2: finalAfter, carbon: Math.min(carbonAfter, building.carbonIntensity), heating: heatingAfter,

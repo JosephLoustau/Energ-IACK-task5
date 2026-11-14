@@ -327,7 +327,7 @@ describe('Rénovation et indicateurs', () => {
     expect(plan.after.rentGain).toBeCloseTo(plan.rent.gain);
   });
 
-  it('calcule la plus-value : dépréciation regagnée sur le coût des mesures retenues', () => {
+  it('calcule la plus-value : dépréciation regagnée sur la part du coût des mesures préservant la valeur', () => {
     expect(valueUpliftFactor(1)).toBe(0);
     expect(valueUpliftFactor(0.7)).toBeCloseTo(0.3);
     expect(valueUpliftFactor(0.4)).toBeCloseTo(0.6);
@@ -335,8 +335,11 @@ describe('Rénovation et indicateurs', () => {
     expect(valueUpliftFactor(1.2)).toBe(0);
 
     const full = planRenovation(building, undefined, 0.7);
-    expect(full.value.renewed).toBeCloseTo(full.capex);
-    expect(full.value.gain).toBeCloseTo(full.capex * 0.3);
+    const share = (m: { id: string; category: 'enveloppe' | 'equipement' }) => m.id === 'pv' ? 0 : VALUE_UPLIFT.preservingShare[m.category];
+    const replaced = full.measures.filter((m) => m.included).reduce((sum, m) => sum + m.cost * share(m), 0);
+    expect(full.value.replaced).toBeCloseTo(replaced);
+    expect(full.value.replaced).toBeLessThan(full.capex);
+    expect(full.value.gain).toBeCloseTo(replaced * 0.3);
     expect(full.value.annual).toBeCloseTo(full.value.gain * annuity(VALUE_UPLIFT.years));
     expect(full.before.valueGain).toBe(0);
     expect(full.after.valueGain).toBeCloseTo(full.value.annual);
@@ -344,7 +347,8 @@ describe('Rénovation et indicateurs', () => {
     expect(planRenovation(building, undefined, 1).value.gain).toBe(0);
 
     const partial = planRenovation(building, new Set(['facade', 'pac']), 0.7);
-    expect(partial.value.gain).toBeCloseTo(partial.capex * 0.3);
+    const facade = partial.measures.find((m) => m.id === 'facade')!, pac = partial.measures.find((m) => m.id === 'pac')!;
+    expect(partial.value.gain).toBeCloseTo((facade.cost * VALUE_UPLIFT.preservingShare.enveloppe + pac.cost * VALUE_UPLIFT.preservingShare.equipement) * 0.3);
     expect(planRenovation(building, new Set(), 0.7).value.gain).toBe(0);
   });
 
