@@ -1,4 +1,4 @@
-import { BASE_YEAR, CRITERIA, RENOVATION } from '../model';
+import { BASE_YEAR, CRITERIA } from '../model';
 import type { Building, Strategy } from '../model';
 import { PLANNING, StrategyComparison } from './plan';
 import { SHADES, SHAPES, shapeFor } from '../symbols';
@@ -40,13 +40,12 @@ export class HtmlReport {
         horizonYear: PLANNING.horizonYear,
         firstWorksYear: PLANNING.firstWorksYear,
         selectedStrategy,
-        fileName: `energiack-feuille-de-route-${selectedStrategy}-${(this.options.generatedAt ?? new Date()).toISOString().slice(0, 10)}`,
+        fileName: `stratoreno-feuille-de-route-${selectedStrategy}-${(this.options.generatedAt ?? new Date()).toISOString().slice(0, 10)}`,
         defaultBudget: budgetKey(PLANNING.defaultBudget),
         budgets: PLANNING.budgetLevels.map((budget) => ({ key: budgetKey(budget), value: budget })),
         comfortLevels: PLANNING.comfortLevels.map(String),
         savingPerDegree: PLANNING.savingPerDegree,
         defaultScc: PLANNING.defaultScc,
-        renovation: RENOVATION,
         criteria: CRITERIA,
         texts: { ...REPORT_TEXTS, ...this.options.texts },
         // Map symbols shared with the app: shape per usage, shades per cohort (1, 2, 3 criteria).

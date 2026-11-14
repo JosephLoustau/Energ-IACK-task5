@@ -8,6 +8,8 @@
   try { Object.assign(state.texts, JSON.parse(document.getElementById('report-texts')?.textContent || '{}')); } catch { /* no saved edits */ }
   const SLOT = { conservative: 1, ambitious: 2, custom: 3 };
   const color = (id) => `var(--s${SLOT[id] ?? 1})`;
+  // Buildings outside the programme: the app's grey at 30 % opacity, flattened for SVG and print.
+  const safeFill = `color-mix(in srgb, ${M.shades.safe[0]} 30%, #fff)`;
   const byId = Object.fromEntries(D.strategies.map((s) => [s.id, s]));
   const last = (a) => a[a.length - 1];
 
@@ -111,11 +113,11 @@
       [p.completionYear ?? '—', T('kpiEnd'), T('kpiEndSub', { firstYear: M.firstWorksYear })],
     ];
     const { svg, outside } = mapSvg(
-      (i) => { const co = cohortOf(c.due[i]); return M.shades[co][Math.min(3, Math.max(1, c.triggers[i].length)) - 1]; },
+      (i) => { const co = cohortOf(c.due[i]); return co === 'safe' ? safeFill : M.shades[co][Math.min(3, Math.max(1, c.triggers[i].length)) - 1]; },
       (i) => buildingTip(i, c.due[i] ? `Premier seuil franchi en <b>${c.due[i]}</b> : ${c.triggers[i].map((t) => M.criteria[t]).join(', ')}` : `Aucun seuil franchi d’ici ${M.baseYear + 10}`),
       'Carte de la situation actuelle');
     const uses = Object.keys(M.shapes);
-    const legend = `<div class="legend"><div>${['now', 'five', 'ten', 'safe'].map((k) => `<span><span class="sw">${(k === 'safe' ? [M.shades.safe[0]] : M.shades[k]).map((col) => `<i style="background:${col}"></i>`).join('')}</span>${COHORTS[k]} <b>${counts[k]}</b></span>`).join('')}</div><div>${uses.map((u) => `<span>${shapeIcon(u)}${esc(u)}</span>`).join('')}</div></div>`;
+    const legend = `<div class="legend"><div>${['now', 'five', 'ten', 'safe'].map((k) => `<span><span class="sw">${(k === 'safe' ? [safeFill] : M.shades[k]).map((col) => `<i style="background:${col}"></i>`).join('')}</span>${COHORTS[k]} <b>${counts[k]}</b></span>`).join('')}</div><div>${uses.map((u) => `<span>${shapeIcon(u)}${esc(u)}</span>`).join('')}</div></div>`;
     const text = T('summary', {
       buildings: nf(D.buildings.length), area: nf(area), emissions: tco2(D.baseline), strategy: esc(s.name),
       thermostatClause: state.comfort !== '0' ? T('summaryThermostat', { degrees: state.comfort }) : '',
@@ -142,10 +144,10 @@
     const y0 = M.firstWorksYear, y1 = Math.max(y0 + 1, p.completionYear ?? y0 + 1);
     const ramp = (yr) => `color-mix(in oklab, var(--seq-hi) ${100 - (yr - y0) / (y1 - y0) * 100}%, var(--seq-lo))`;
     const { svg } = mapSvg(
-      (i) => works.has(i) ? ramp(works.get(i)[1]) : '#fff',
+      (i) => works.has(i) ? ramp(works.get(i)[1]) : safeFill,
       (i) => { const w = works.get(i); return buildingTip(i, w ? `Travaux <b>${w[1]}</b> · ${mchf(w[2])} · −${nf(w[3], 1)} tCO₂e/an` : 'Surveillance, pas de travaux'); },
       'Carte de la feuille de route');
-    const legendMap = `<div class="legend"><div><span class="ramp"><b>${y0}</b><i></i><b>${y1}</b></span><span>Année des travaux</span><span><i class="sw-safe"></i>Surveillance</span></div></div>`;
+    const legendMap = `<div class="legend"><div><span class="ramp"><b>${y0}</b><i></i><b>${y1}</b></span><span>Année des travaux</span><span><i class="sw-safe" style="background:${safeFill}"></i>Surveillance</span></div></div>`;
     const bars = barChart({ values: p.capex, fill: color(s.id), cap, label: 'Investissement annuel', tip: (i) => `<b>${D.years[i]}</b><div>${mchf(p.capex[i])}</div><div>${p.count[i]} bâtiments</div>` });
     const lots = D.years.map((y, i) => ({ y, cost: p.capex[i], count: p.count[i] })).filter((l) => l.count > 0);
     const g0 = M.baseYear, g1 = Math.max(M.baseYear + 10, y1 + 1), span = g1 - g0 + 1;
@@ -200,7 +202,7 @@
     let prudence = '';
     if (cons && amb) {
       const dCost = amb.totalCost - cons.totalCost, dCo2 = cons.cumulative - amb.cumulative;
-      claim = T('s3Claim', { dCost: mchf(dCost), dCo2: tco2(dCo2), horizon: M.horizonYear });
+      claim = T('s3Claim', { ambitious: esc(byId.ambitious.name), conservative: esc(byId.conservative.name), dCost: mchf(dCost), dCo2: tco2(dCo2), horizon: M.horizonYear });
       if (dCo2 > 0 && dCost > 0) prudence = T('s3PerTonne', { perTonne: nf(dCost / dCo2) })
         + (dCost / dCo2 <= state.scc ? T('s3Worth', { scc: nf(state.scc) }) : T('s3NotWorth', { scc: nf(state.scc), horizon: M.horizonYear }));
     }
@@ -243,7 +245,7 @@
       <div class="actions"><button class="btn" data-action="list">Afficher la liste</button><button class="btn" data-action="csv">Export CSV</button></div></div>`;
   }
   function annexes() {
-    const s = byId[state.strategy], R = M.renovation;
+    const s = byId[state.strategy];
     const th = (t) => `IDC &gt; ${nf(t.idc)} MJ/m²/an · état &lt; ${nf(t.condition, 2)} · CO₂ &gt; ${nf(t.carbon)} kg/m²/an`;
     const inputs = [
       ['Périmètre', `${esc(M.scopeLabel)} · ${nf(D.buildings.length)} bâtiments · ${nf(area)} m²`],
@@ -255,8 +257,8 @@
       ['Année de référence · horizon', `${M.baseYear} · ${M.horizonYear}`],
     ];
     const vars = {
-      year: M.baseYear, dueHorizon: M.baseYear + 10, heat: nf(R.heatReduction * 100), target: R.targetCondition, lowCarbon: R.lowCarbonFactor,
-      fixed: R.fixedCostPerM2, variable: R.conditionCostPerM2, firstYear: M.firstWorksYear, saving: nf(M.savingPerDegree * 100), horizon: M.horizonYear,
+      year: M.baseYear, dueHorizon: M.baseYear + 10,
+      firstYear: M.firstWorksYear, saving: nf(M.savingPerDegree * 100), horizon: M.horizonYear,
     };
     const scenario = `${esc(s.name)}, ${comfortLabel(state.comfort)}, ${budgetLabel(state.budget)}`;
     return page(`
@@ -314,6 +316,7 @@
   function render() {
     const scroll = window.scrollY;
     pageNo = 0;
+    document.body.dataset.strategy = state.strategy;
     root.innerHTML = toolbar() + `<main class="pages">${synthesis()}${roadmap()}${comparison()}${annexes()}</main>`;
     window.scrollTo(0, scroll);
   }

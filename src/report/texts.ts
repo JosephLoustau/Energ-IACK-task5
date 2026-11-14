@@ -61,8 +61,8 @@ export const REPORT_TEXTS = {
   s3Eyebrow: '3 · Comparaison',
   s3Title: 'Ce que l’on aurait pu faire mieux',
   s3ClaimGeneric: 'Comparaison avec les autres stratégies, au même budget et au même thermostat.',
-  // {dCost} {dCo2} {horizon}
-  s3Claim: 'L’Accélération carbone coûte {dCost} de plus que la stratégie Conservatoire et évite {dCo2} de plus d’ici {horizon}.',
+  // {ambitious} {conservative} {dCost} {dCo2} {horizon}
+  s3Claim: 'La stratégie {ambitious} coûte {dCost} de plus que la stratégie {conservative} et évite {dCo2} de plus d’ici {horizon}.',
   s3Note: 'Coût complet = investissement + {scc} CHF par tonne de CO₂ émise, {year}–{horizon}.', // {scc} {year} {horizon}
   s3Figure: 'Émissions annuelles du parc selon la stratégie',
   s3FigureSource: 'Budget {budget}, {thermostat}.', // {budget} {thermostat}
@@ -93,17 +93,17 @@ export const REPORT_TEXTS = {
   a2Eyebrow: 'Annexe B',
   a2Title: 'Paramètres et hypothèses',
   a2Claim: 'Les valeurs saisies pour ce rapport, puis la méthode derrière chaque chiffre.',
-  // Hypotheses: placeholders {year} {dueHorizon} {heat} {target} {lowCarbon} {fixed} {variable} {firstYear} {saving} {horizon}
+  // Hypotheses: placeholders {year} {dueHorizon} {firstYear} {saving} {horizon}
   hypotheses: [
     ['Déclenchement', 'Un bâtiment entre au programme dès qu’un critère dépasse son seuil (IDC, état, CO₂), au premier franchissement entre {year} et {dueHorizon}. Sans travaux, l’IDC et le CO₂ restent constants et l’état se dégrade avec l’âge (courbe en S).'],
-    ['Intervention type', 'Chaleur −{heat} %, état relevé à au moins {target}, chauffage bas carbone à {lowCarbon} kgCO₂e/kWh. Coût = SRE × [{fixed} + {variable} × (1 − état à la date des travaux)] CHF/m².'],
+    ['Intervention type', 'Paquet de mesures : isolation (façade, toit, cave), fenêtres, PAC air/eau si chauffage fossile et photovoltaïque si possible. Coût = somme des mesures chiffrées par bâtiment ; état remis à 1 après travaux.'],
     ['Planification', 'Premiers travaux en {firstYear} (une année d’études, une année d’appel d’offres). Les bâtiments sont placés par ordre de priorité, chacun la première année où le budget le permet. Un bâtiment plus coûteux que le plafond occupe seul son année. Le gain CO₂ compte dès l’année suivant les travaux.'],
     ['Thermostat', 'Une baisse de n °C multiplie l’IDC et le CO₂ de chaque bâtiment par (1 − {saving} % × n), dès {year} et avant la vérification des seuils. Règle empirique, appliquée uniformément.'],
     ['Coût social du carbone', 'Coût marginal des dommages causés par une tonne de CO₂ supplémentaire. Coût complet = investissement + CSC × tonnes émises de {year} à {horizon}, sans actualisation. Par bâtiment, le coût net CSC retranche la valeur des tonnes évitées jusqu’en {horizon}.'],
     ['Limites', 'Non modélisés : faisabilité PAC/CAD, patrimoine protégé, subventions, inflation, économies d’exploitation, carbone gris des travaux, capacité des entreprises, émissions après {horizon}.'],
     ['Sources', 'SITG, QuantHome. Indice d’état = proxy (âge, travaux récents), pas un diagnostic Stratus. Seuils proposés par l’équipe, non validés réglementairement.'],
   ] as [string, string][],
-  a2Footer: 'Document d’aide à la décision généré par ÉnergiACK le {date}. Les seuils, coûts et calendriers sont des hypothèses de simulation, pas des obligations légales ni des devis.', // {date}
+  a2Footer: 'Document d’aide à la décision généré par StratoRéno le {date}. Les seuils, coûts et calendriers sont des hypothèses de simulation, pas des obligations légales ni des devis.', // {date}
 
   // ---- Toolbar help ("?") ------------------------------------------------------------------
   helpThermostatTitle: 'Agir sur la demande avant de rénover',
@@ -117,7 +117,7 @@ export const REPORT_TEXTS = {
     + '<p>Le rapport multiplie les tonnes émises de {year} à {horizon} par le CSC et les ajoute à l’investissement : c’est le <b>coût complet</b>. Les coûts sont affichés avec et sans le CSC.</p>'
     + '<p class="muted">Défaut : {defaultScc} CHF/tCO₂e. Pas d’actualisation ; les émissions après {horizon} ne sont pas comptées.</p>',
 
-  pageFooter: 'ÉnergiACK · Feuille de route de décarbonation',
+  pageFooter: 'StratoRéno · Feuille de route de décarbonation',
 };
 
 export type ReportTexts = typeof REPORT_TEXTS;

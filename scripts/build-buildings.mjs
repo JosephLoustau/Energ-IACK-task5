@@ -1,12 +1,10 @@
-// Convertit public/data/ville_geneve_core.geojson (produit par stock.py, SITG + QuantHome) en un JSON
+// Convertit la collection de bâtiments produite par stock.py (GeoJSON SITG + QuantHome) en un JSON
 // compact consommé par l'application : src/buildings.generated.json (non versionné).
-// Usage : npm run data   ou   node scripts/build-buildings.mjs [chemin/vers/fichier.geojson]
+// Appelé par scripts/build-data.mjs (npm run data) ; ou : node scripts/build-buildings.mjs fichier.geojson
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const input = process.argv[2] ?? fileURLToPath(new URL('../public/data/ville_geneve_core.geojson', import.meta.url));
-const output = fileURLToPath(new URL('../src/buildings.generated.json', import.meta.url));
-const geo = JSON.parse(readFileSync(input, 'utf8'));
+export const OUTPUT = fileURLToPath(new URL('../src/buildings.generated.json', import.meta.url));
 
 const USAGE = {
   'Education': 'Éducation', 'Residential': 'Logement', 'Mixed residential': 'Logement mixte',
@@ -51,6 +49,7 @@ function yearOf(p) {
   return { year: null, estimated: true };
 }
 
+export function writeBuildings(geo, output = OUTPUT) {
 const rows = geo.features.map((f) => {
   const p = f.properties;
   const [district, ...street] = (p.address ?? '').split(',');
@@ -114,3 +113,6 @@ writeFileSync(output, JSON.stringify(buildings));
 const count = (key) => buildings.filter((b) => b.imputed.includes(key)).length;
 console.log(`${buildings.length} bâtiments écrits dans ${output}`);
 console.log(`imputés — IDC: ${count('idc')}, CO₂: ${count('carbon')}, année: ${count('year')}`);
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) writeBuildings(JSON.parse(readFileSync(process.argv[2], 'utf8')));

@@ -47,7 +47,7 @@ footer{color:var(--muted);font-size:13px;margin-top:32px}
 </ol>
 
 <h2 id="overview">1. Overview</h2>
-<p>The <b>Rapport HTML</b> button in the app's top bar builds a single, self-contained HTML file and opens it in a new tab. The file holds its own data, styles and script, so it works offline (only the web fonts need a connection, with a system fallback). It is laid out like an A4 document and prints to PDF cleanly.</p>
+<p>The <b>Rapport HTML</b> button in the app's top bar builds a single, self-contained HTML file and opens it in a new tab. The file holds its own data, styles and script, so it works fully offline. It is laid out like an A4 document and prints to PDF cleanly.</p>
 <p>The report covers the strategy selected in the app and the buildings that pass the app's filters (usage, search). Inside the report the reader can still change three levers (thermostat, annual budget, social cost of carbon), rewrite the text, and download the result.</p>
 
 <h2 id="files">2. Files</h2>
@@ -144,7 +144,7 @@ s2Claim: '{count} bâtiments rénovés de {firstYear} à {end}, par lots annuels
 <p>Change <code>PLANNING</code> in <code>plan.ts</code>. Adding a budget or thermostat level adds plans to the payload, so the file grows roughly in proportion. The renovation costs and thresholds are in <code>model.ts</code> (<code>RENOVATION</code>, <code>PRESETS</code>) and also change the app.</p>
 
 <h3>The look</h3>
-<p>Colours are CSS variables at the top of <code>report.css</code>: the app identity (black, Geneva yellow, red), the three strategy colours <code>--s1..--s3</code> (blue, orange, aqua, validated for colour-blind readers) and the blue ramp used for the works year. Page size and margins are on <code>.page</code>.</p>
+<p>The report follows the app's graphical chart (<code>src/styles.css</code>): Helvetica Neue, warm greys, Geneva yellow, and one colour per scenario (<code>--scenario-color</code>, set from <code>data-strategy</code> on <code>body</code>). That colour marks the KPI card borders, the takeaway panels, the active controls and the works-year ramp. The chart series <code>--s1..--s3</code> are the app's scenario colours, with <code>--s1</code> lightened (<code>#e8646f</code>) so red and green stay apart for colour-blind readers. If the app's colours change, update the variables at the top of <code>report.css</code>. Page size and margins are on <code>.page</code>.</p>
 
 <h2 id="gotchas">8. Constraints and pitfalls</h2>
 <ul>
@@ -177,5 +177,5 @@ node --check src/report/runtime.js</pre>
   <li>The maps have no background tiles, so the file stays self-contained; 1 % of outlying buildings on each side are left out of the frame and counted in the caption.</li>
 </ul>
 
-<footer>ÉnergiACK · Défi 5. See also <a href="data_model.html">data_model.html</a> for where the building data comes from.</footer>
+<footer>StratoRéno · Défi 5. See also <a href="data_model.html">data_model.html</a> for where the building data comes from.</footer>
 </main></body></html>

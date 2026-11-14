@@ -1,3 +1,4 @@
+import { COHORTS } from './model';
 import type { Assessment, Cohort } from './model';
 
 /** Formes en repère [-1, 1], utilisables en SVG (path) et en canvas (Path2D). */
@@ -55,10 +56,10 @@ export function shapePolygon(shape: ShapeName, circleSides = 20): [number, numbe
 
 /** Teintes selon l'échéance et le nombre de critères dépassés (IDC, CO₂, vétusté). */
 export const SHADES: Record<Cohort, [string, string, string]> = {
-  now: ['#f4958d', '#dc2f26', '#8b0a12'],
-  five: ['#fbe38a', '#f6c51c', '#b58500'],
-  ten: ['#d9d5c8', '#a29d8e', '#605b4f'],
-  safe: ['#ffffff', '#ffffff', '#ffffff'],
+  now: ['#f4958d', COHORTS.now.color, '#8b0a12'],
+  five: ['#fbe58b', COHORTS.five.color, '#b28b0b'],
+  ten: ['#a8d7bf', COHORTS.ten.color, '#1c654e'],
+  safe: [COHORTS.safe.color, COHORTS.safe.color, COHORTS.safe.color],
 };
 export const markerColor = (cohort: Cohort, criteria: number) =>
   SHADES[cohort][Math.min(3, Math.max(1, criteria)) - 1]!;

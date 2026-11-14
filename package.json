@@ -1,14 +1,10 @@
 {
-<<<<<<< HEAD
-  "name": "energiack-geneve",
-=======
   "name": "stratoreno-geneve",
->>>>>>> origin/3d-view
   "private": true,
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "data": "node scripts/build-data.mjs && node scripts/build-buildings.mjs",
+    "data": "node scripts/build-data.mjs",
     "predev": "npm run data",
     "prebuild": "npm run data",
     "dev": "vite --host 127.0.0.1",
@@ -18,11 +14,7 @@
   },
   "dependencies": {
     "lucide-react": "^0.468.0",
-<<<<<<< HEAD
-    "maplibre-gl": "^6.18.0",
-=======
     "maplibre-gl": "^6.16.0",
->>>>>>> origin/3d-view
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },

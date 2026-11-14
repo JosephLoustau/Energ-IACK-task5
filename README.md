@@ -4,7 +4,7 @@
 
 Application web d'aide à la décision pour prioriser la rénovation et la
 décarbonation d'un parc municipal. Première version fonctionnelle avec
-les **770 bâtiments de la Ville de Genève** (SITG / QuantHome, `ville_geneve_core.geojson`), sans accès API ni chatbot. Régénérer les données : `npm run data`.
+les **770 bâtiments de la Ville de Genève** (SITG / QuantHome, construits par `stock.py`), sans accès API ni chatbot. Régénérer les données : `npm run data`.
 
 ### Lancer l'application
 
@@ -103,6 +103,7 @@ Voir le [cahier des charges](./CAHIER-DES-CHARGES.md) et le panneau
 - [Données fictives](./src/data.ts) : génération déterministe.
 - [Tableau de bord](./src/App.tsx) et [carte](./src/BuildingMap.tsx).
 - [Tests métier](./src/model.test.ts).
+- [Rapport HTML](./src/report/) : calculs ([plan.ts](./src/report/plan.ts)), mise en page ([runtime.js](./src/report/runtime.js), [report.css](./src/report/report.css)) et **textes par défaut** ([texts.ts](./src/report/texts.ts)) ; fonctionnement détaillé : [docs/report.html](./docs/report.html).
 - [Transcriptions de cadrage](./transcripts/transcripts.zip).
 
 ### Intégration réelle ultérieure

@@ -235,11 +235,3 @@ context.md
 data/
 public/data/
 src/buildings.generated.json
-/ville_geneve_core.geojson
-
-# local only
-context.md
-data/
-public/data/
-src/buildings.generated.json
-/ville_geneve_core.geojson

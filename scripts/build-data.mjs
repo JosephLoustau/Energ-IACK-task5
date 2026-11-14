@@ -1,7 +1,9 @@
-// Builds public/data/ from the Python pipeline (stock.py) before the app starts.
+// Builds the app data from the Python pipeline (stock.py, cached API responses in data/cache/) before the app starts:
+// public/data/ville_geneve_3d.geojson (map volumes) and src/buildings.generated.json (buildings, via build-buildings.mjs).
 // Uses the project's .venv Python when present (macOS/Linux or Windows layout).
 import { existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { OUTPUT, writeBuildings } from './build-buildings.mjs';
 
 const candidates = [
   '.venv/bin/python',
@@ -9,10 +11,12 @@ const candidates = [
   process.platform === 'win32' ? 'python' : 'python3',
 ];
 const python = candidates.find((p) => !p.includes('/') || existsSync(p));
-const run = spawnSync(python, ['stock.py', '--out', 'public/data', '--quiet'], { stdio: 'inherit' });
+const run = spawnSync(python, ['stock.py', '--out', 'public/data', '--quiet', '--core-stdout'],
+  { stdio: ['ignore', 'pipe', 'inherit'], encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
 
-if (run.status !== 0) {
-  const hasData = existsSync('public/data/ville_geneve_core.geojson');
-  console.warn(`[data] build failed (${python}).` + (hasData ? ' Using existing public/data/.' : ' No data files available.'));
-  if (!hasData) process.exit(1);
+if (run.status === 0) {
+  writeBuildings(JSON.parse(run.stdout));
+} else {
+  console.warn(`[data] build failed (${python}).` + (existsSync(OUTPUT) ? ' Using existing data files.' : ' No data files available.'));
+  if (!existsSync(OUTPUT)) process.exit(1);
 }

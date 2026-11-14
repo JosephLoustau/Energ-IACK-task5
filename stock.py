@@ -5,6 +5,7 @@ third-party DDP and unheated buildings. Enriched with SITG, QuantHome and QBuild
 """
 import json
 import re
+import sys
 import time
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -550,11 +551,13 @@ class CityStock:
             out[name] = c
         return out
 
-    def to_geojson(self, path: str) -> None:
+    def geojson(self) -> dict:
         feats = [{"type": "Feature", "geometry": b.geometry, "properties": b.to_record()}
                  for b in self.buildings.values()]
-        Path(path).write_text(json.dumps({"type": "FeatureCollection", "schema": self.schema(), "features": feats},
-                                         ensure_ascii=False))
+        return {"type": "FeatureCollection", "schema": self.schema(), "features": feats}
+
+    def to_geojson(self, path: str) -> None:
+        Path(path).write_text(json.dumps(self.geojson(), ensure_ascii=False))
 
 
     def to_geojson_3d(self, path: str, precision: int = 6) -> None:
@@ -574,14 +577,20 @@ def main() -> None:
     ap.add_argument("--out", default="public/data", help="output directory served by the web app")
     ap.add_argument("--refresh", action="store_true", help="refetch all providers instead of using data/cache")
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--core-stdout", action="store_true",
+                    help="write the building collection (GeoJSON) to stdout for scripts/build-data.mjs; logs go to stderr")
     args = ap.parse_args()
+    stdout = sys.stdout
+    if args.core_stdout:
+        sys.stdout = sys.stderr
     stock = CityStock(with_3d=True)
     stock.build(refresh=args.refresh)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    stock.to_geojson(str(out / "ville_geneve_core.geojson"))
     stock.to_geojson_3d(str(out / "ville_geneve_3d.geojson"))
-    print(f"[data] {len(stock.buildings)} buildings -> {out}/")
+    print(f"[data] {len(stock.buildings)} buildings -> {out}/ville_geneve_3d.geojson")
+    if args.core_stdout:
+        json.dump(stock.geojson(), stdout, ensure_ascii=False)
     if not args.quiet:
         print(stock.log)
         for cat in Category:

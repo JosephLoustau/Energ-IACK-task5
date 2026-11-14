@@ -56,7 +56,7 @@ export function createDemoBuildings(): Building[] {
   });
 }
 
-/** Parc réel de la Ville de Genève (ville_geneve_core.geojson → npm run data). */
+/** Parc réel de la Ville de Genève (stock.py → npm run data). */
 export const BUILDINGS: Building[] = (realBuildings as unknown as Omit<Building, 'condition' | 'annualDecay'>[])
   .map(withConditionModel);
 export const BUILDING_USES = [...new Set(BUILDINGS.map((b) => b.use))].sort((a, b) => a.localeCompare(b, 'fr'));
