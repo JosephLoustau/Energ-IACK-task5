@@ -343,7 +343,7 @@ tbody tr:hover { background: #fffaf0; }
 .bar-chart .net-halo { stroke: #fff; stroke-width: 4; }
 .bar-chart .net-line { stroke: var(--black); stroke-width: 1.75; }
 .charts-legend i.net-line { width: 16px; height: 0; border: 0; border-top: 2px solid var(--black); }
-.bar-label { font-size: 11px; fill: var(--muted); }
+.bar-label { font: 700 14px 'Manrope', sans-serif; fill: var(--black); }
 rect.seg-energy, i.seg-energy { fill: var(--yellow); background: var(--yellow); stroke: var(--black); stroke-width: 1; }
 rect.seg-renovation, i.seg-renovation { fill: var(--black); background: var(--black); stroke: var(--black); stroke-width: 1; }
 rect.seg-envelope, i.seg-envelope { fill: #1e5b3a; background: #1e5b3a; stroke: var(--black); stroke-width: 1; }
