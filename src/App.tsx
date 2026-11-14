@@ -240,7 +240,7 @@ export default function App({ buildings }: { buildings: Building[] }) {
       <a className="brand" href="#main" aria-label="DeCathlon Genève — tableau de bord"><Blason /><img className="app-logo" src="/decathlon-geneve-logo.svg" width="140" height="66" alt="DeCathlon Genève" /><span className="brand-slogan">10 ans pour décarboner<br />le parc bâti</span></a>
       <div className="topbar-right">
         <span className="topbar-count"><strong>{buildings.length}</strong> bâtiments de la Ville</span>
-        <button className="help-button" onClick={() => setTourOpen(true)}><PlayCircle size={16} /> Visite guidée</button>
+        <button className="help-button tour-launch-button" onClick={() => setTourOpen(true)}><PlayCircle size={16} /> Visite guidée</button>
         <button className="help-button" onClick={() => setShowAssumptions(true)} aria-expanded={showAssumptions}><CircleHelp size={16} /> Méthode & hypothèses</button>
       </div>
     </header>

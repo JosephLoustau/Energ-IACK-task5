@@ -8,8 +8,21 @@ import { BUILDINGS } from './test-data';
 import { BASE_YEAR, COHORTS, DASHBOARD_LAST_YEAR, PRESETS, assessBuilding, assessPortfolio, programMetrics, renovationFor, selectProgram } from './model';
 import type { Building } from './model';
 import { ICON_COLORS, SHADES, criteriaOf, markerColor } from './symbols';
+import { TOUR_STEPS } from './tourSteps';
 
 const App = () => <PortfolioApp buildings={BUILDINGS} />;
+
+describe('Visite guidée', () => {
+  it('met en avant le lancement et cible le panneau complet pour le diagramme', () => {
+    const html = renderToStaticMarkup(<App />);
+    expect(html).toContain('class="help-button tour-launch-button"');
+    const diagram = TOUR_STEPS.find((step) => step.onEnter === 'tab-chart');
+    expect(diagram?.target).toBe('map');
+    expect(html).toContain('class="view-panel" data-tour="map"');
+    expect(TOUR_STEPS.find((step) => step.onEnter === 'tab-measures')?.target).toBe('measures');
+    expect(TOUR_STEPS.some((step) => step.target === 'kpis')).toBe(true);
+  });
+});
 
 vi.mock('./BuildingMap', () => ({
   default: ({ assessments }: { assessments: { building: { id: string }; cohort: string }[] }) =>

@@ -13,18 +13,64 @@ export default function Tour({ open, onClose, onEnter }: Props) {
   const step = TOUR_STEPS[index]!;
 
   useEffect(() => { if (open) setIndex(0); }, [open]);
-  useEffect(() => { if (open && step.onEnter) onEnter(step.onEnter); }, [open, step, onEnter]);
+  useLayoutEffect(() => { if (open && step.onEnter) onEnter(step.onEnter); }, [open, step, onEnter]);
   useLayoutEffect(() => {
     if (!open) return;
+    let element: HTMLElement | null = null;
+    let frame = 0;
+    let previousFocus: HTMLElement | null = null;
+    let originalTabIndex: string | null = null;
     const measure = () => {
-      const element = document.querySelector(`[data-tour="${step.target}"]`);
-      element?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       setRect(element ? element.getBoundingClientRect() : null);
     };
-    const timer = setTimeout(measure, 60);
-    window.addEventListener('resize', measure);
+    const focusTarget = () => {
+      element ??= document.querySelector<HTMLElement>(`[data-tour="${step.target}"]`);
+      if (!element) return;
+      const margin = 24;
+      const headerBottom = document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 0;
+      const width = popover.current?.offsetWidth ?? 340;
+      const height = popover.current?.offsetHeight ?? 220;
+      const beside = window.innerWidth - element.getBoundingClientRect().width >= width + margin * 3;
+      const available = Math.max(120, window.innerHeight - headerBottom - margin * 2 - (beside ? 0 : height + margin));
+      element.style.setProperty('--tour-available-height', `${available}px`);
+      element.style.setProperty('--tour-view-header-height', `${element.querySelector('.view-header')?.getBoundingClientRect().height ?? 0}px`);
+      element.classList.add('tour-focus-target');
+      element.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
+      const bounds = element.getBoundingClientRect();
+      const top = headerBottom + margin;
+      const bottom = window.innerHeight - margin;
+      const adjustment = !beside || bounds.top < top ? bounds.top - top : bounds.bottom > bottom ? bounds.bottom - bottom : 0;
+      if (adjustment) window.scrollBy({ top: adjustment, behavior: 'instant' });
+      measure();
+    };
+    frame = requestAnimationFrame(() => {
+      element = document.querySelector<HTMLElement>(`[data-tour="${step.target}"]`);
+      if (!element) return;
+      previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      originalTabIndex = element.getAttribute('tabindex');
+      element.setAttribute('tabindex', '-1');
+      element.scrollTop = 0;
+      focusTarget();
+      element.focus({ preventScroll: true });
+    });
+    const observer = new ResizeObserver(measure);
+    if (popover.current) observer.observe(popover.current);
+    const resize = () => { focusTarget(); };
+    window.addEventListener('resize', resize);
     window.addEventListener('scroll', measure, true);
-    return () => { clearTimeout(timer); window.removeEventListener('resize', measure); window.removeEventListener('scroll', measure, true); };
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      window.removeEventListener('resize', resize);
+      window.removeEventListener('scroll', measure, true);
+      if (!element) return;
+      element.classList.remove('tour-focus-target');
+      element.style.removeProperty('--tour-available-height');
+      element.style.removeProperty('--tour-view-header-height');
+      if (originalTabIndex === null) element.removeAttribute('tabindex');
+      else element.setAttribute('tabindex', originalTabIndex);
+      previousFocus?.focus({ preventScroll: true });
+    };
   }, [open, step]);
   // Place la fenêtre d'explication sans recouvrir l'élément mis en avant : à droite, à gauche, dessous, dessus, puis dans un coin.
   useLayoutEffect(() => {
