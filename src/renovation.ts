@@ -95,29 +95,17 @@ export const PV = {
 /** Loyers : 1 année de loyers perdue pendant les travaux, répartie sur 30 ans ; hausse de loyer pour le confort (hypothèse modèle). */
 export const RENT = { lossYears: 1, spreadYears: 30, comfortUplift: 0.10 };
 /**
- * Plus-value immobilière (hypothèses modèle, non sourcées) : part de la valeur du bâtiment regagnée par la rénovation,
- * d'autant plus grande que le bâtiment est vétuste. Facteur linéaire en fonction de l'indice d'état de l'année des
- * travaux : `factorNew` (0,2) pour un état ≥ `conditionNew` (1, neuf) et `factorWorn` (0,6) pour un état ≤ `conditionWorn`
- * (0,4, état d'un bâtiment de 70 ans, coude du modèle de dégradation). Appliqué au prorata du coût du paquet complet
- * réellement retenu, puis annualisé à DISCOUNT_RATE sur `years` ans.
- * Valeur du bâtiment :
- *  - loyers résidentiels renseignés : loyer annuel / `capRate`, taux de capitalisation des immeubles de logements fixé
- *    par le Conseil d'État pour l'estimation fiscale des immeubles locatifs, 3,88 % pour l'année fiscale 2026
- *    [RIPP2026, art. 25 al. 3] (valeur terrain compris) ;
- *  - sinon SRE × `perM2` : coût du bâtiment (CFC 2) de 2 827 CHF/m² de surface de plancher SIA 416, logements de
- *    l'OFCL à Vernier, prix d'octobre 2015 non indexés [OFCL2020] ; SP assimilée à la SRE (proxy, hors terrain).
+ * Plus-value immobilière : valeur intrinsèque (Realwert/Sachwert) regagnée par la rénovation. Le Neuwert d'un élément
+ * est déprécié par l'âge (Altersentwertung = 1 − état de l'élément [SHB_TG2025, § 3.2 et glossaire]) ; renouvelé, il
+ * retrouve son Neuwert. Plus-value = Neuwert des éléments renouvelés × (1 − indice d'état de l'année des travaux),
+ * avec Neuwert des éléments renouvelés ≈ coût des mesures retenues (hypothèse modèle : la part d'amélioration énergétique
+ * du coût est valorisée par les économies d'énergie et la hausse de loyer, déjà comptées, d'où pas de double comptage).
+ * Équivaut à une part (1 − état) de la valeur à neuf du bâtiment, au prorata de la part du bâtiment renouvelée.
+ * Annualisée à DISCOUNT_RATE sur `years` ans.
  */
-export const BUILDING_VALUE = { capRate: 0.0388, perM2: 2827, factorNew: 0.2, factorWorn: 0.6, conditionNew: 1, conditionWorn: 0.4, years: 30 };
-/** Facteur de plus-value (part de la valeur du bâtiment) selon l'indice d'état de l'année des travaux. */
-export function valueUpliftFactor(condition: number, p = BUILDING_VALUE) {
-  const t = Math.min(1, Math.max(0, (p.conditionNew - condition) / (p.conditionNew - p.conditionWorn)));
-  return p.factorNew + t * (p.factorWorn - p.factorNew);
-}
-/** Valeur du bâtiment (CHF) : capitalisation des loyers résidentiels, sinon SRE × valeur à neuf par m². */
-export function buildingValue(building: Building, p = BUILDING_VALUE): { value: number; basis: 'loyers' | 'sre' } {
-  const rent = building.rentResidential ?? 0;
-  return rent > 0 ? { value: rent / p.capRate, basis: 'loyers' } : { value: building.area * p.perM2, basis: 'sre' };
-}
+export const VALUE_UPLIFT = { years: 30 };
+/** Facteur de plus-value = dépréciation regagnée (1 − indice d'état), borné à [0, 1]. */
+export const valueUpliftFactor = (condition: number) => Math.min(1, Math.max(0, 1 - condition));
 const ELECTRIC_HEATING = new Set(['Pompe à chaleur', 'Électrique']);
 const FOSSIL_OR_UNKNOWN = new Set(['Gaz', 'Mazout', 'Gaz + mazout', 'Inconnu']);
 
@@ -252,11 +240,8 @@ export interface RenovationPlan {
   /** Carbone gris des mesures retenues : total (kgCO₂e), amorti sur la durée de vie de chaque mesure (kgCO₂e/an et kgCO₂e/m² SRE·an). */
   embodied: { total: number; annual: number; perM2Year: number };
   rent: { base: number; loss: number; gain: number; net: number };
-  /**
-   * Plus-value immobilière : valeur du bâtiment et sa base de calcul, facteur selon l'état, part du coût du paquet complet
-   * retenue, plus-value totale (CHF) et annualisée (CHF/an).
-   */
-  value: { base: number; basis: 'loyers' | 'sre'; condition: number; factor: number; share: number; gain: number; annual: number };
+  /** Plus-value immobilière : état de l'année des travaux, facteur (1 − état), Neuwert renouvelé (= capex), plus-value (CHF) et annualisée (CHF/an). */
+  value: { condition: number; factor: number; renewed: number; gain: number; annual: number };
 }
 
 interface SideInput {
@@ -398,18 +383,15 @@ export function planRenovation(building: Building, selection?: ReadonlySet<strin
   const loss = worksInside ? base * RENT.lossYears / RENT.spreadYears : 0;
   const gain = worksInside ? base * RENT.comfortUplift : 0;
 
-  // Plus-value : facteur selon l'état × valeur du bâtiment, au prorata du coût du paquet complet (toutes mesures) retenu.
-  const fullCapex = selection ? planRenovation(building, undefined, condition).capex : capex;
-  const packageShare = fullCapex > 0 ? Math.min(1, capex / fullCapex) : 0;
-  const { value: valueBase, basis } = buildingValue(building);
+  // Plus-value : dépréciation regagnée sur le Neuwert des éléments renouvelés (coût des mesures retenues).
   const factor = valueUpliftFactor(condition);
-  const valueGain = valueBase * factor * packageShare;
-  const valueAnnual = valueGain * annuity(BUILDING_VALUE.years);
+  const valueGain = capex * factor;
+  const valueAnnual = valueGain * annuity(VALUE_UPLIFT.years);
   return {
     measures, capex, heatPump, districtHeating, powerKw,
     pv: { kwc: pvOn ? kwc : 0, production, blocked: protectedBuilding, reason },
     rent: { base, loss, gain, net: gain - loss }, embodied,
-    value: { base: valueBase, basis, condition, factor, share: packageShare, gain: valueGain, annual: valueAnnual },
+    value: { condition, factor, renewed: capex, gain: valueGain, annual: valueAnnual },
     before: sideCosts(building, { finalKwhPerM2: finalBefore, carbon: building.carbonIntensity, heating: building.heating }),
     after: sideCosts(building, {
       finalKwhPerM2: finalAfter, carbon: Math.min(carbonAfter, building.carbonIntensity), heating: heatingAfter,

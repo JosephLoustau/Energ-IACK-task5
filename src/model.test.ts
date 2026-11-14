@@ -6,7 +6,7 @@ import {
   programMetrics, renovationFor, selectProgram, thresholdsAt, triggeredCriteria, validateStrategy,
 } from './model';
 import type { Building, Strategy } from './model';
-import { CARRIERS, ELECTRICITY_EMISSION, ELEMENT_RATIO, EMBODIED, insulationEmbodied, HEAT_PUMP_COP, MEASURE_IDS, PV, RENT, BUILDING_VALUE, SOCIAL_CARBON_COST, WINDOW_SHARE, annuity, buildingValue, valueUpliftFactor, carbonFromIdc, districtHeatingCost, elementRatios, heatPumpCost, planRenovation, windowShareFor } from './renovation';
+import { CARRIERS, ELECTRICITY_EMISSION, ELEMENT_RATIO, EMBODIED, insulationEmbodied, HEAT_PUMP_COP, MEASURE_IDS, PV, RENT, VALUE_UPLIFT, SOCIAL_CARBON_COST, WINDOW_SHARE, annuity, valueUpliftFactor, carbonFromIdc, districtHeatingCost, elementRatios, heatPumpCost, planRenovation, windowShareFor } from './renovation';
 
 const building: Building = {
   id: 'TEST-1',
@@ -327,25 +327,24 @@ describe('Rénovation et indicateurs', () => {
     expect(plan.after.rentGain).toBeCloseTo(plan.rent.gain);
   });
 
-  it('calcule la plus-value selon l’état, la valeur du bâtiment et la part du paquet retenue', () => {
-    expect(valueUpliftFactor(1)).toBeCloseTo(0.2);
-    expect(valueUpliftFactor(0.7)).toBeCloseTo(0.4);
+  it('calcule la plus-value : dépréciation regagnée sur le coût des mesures retenues', () => {
+    expect(valueUpliftFactor(1)).toBe(0);
+    expect(valueUpliftFactor(0.7)).toBeCloseTo(0.3);
     expect(valueUpliftFactor(0.4)).toBeCloseTo(0.6);
-    expect(valueUpliftFactor(0.1)).toBeCloseTo(0.6);
-    expect(buildingValue(building)).toEqual({ value: building.area * BUILDING_VALUE.perM2, basis: 'sre' });
-    expect(buildingValue({ ...building, rentResidential: 300_000 })).toEqual({ value: 300_000 / BUILDING_VALUE.capRate, basis: 'loyers' });
+    expect(valueUpliftFactor(-0.1)).toBe(1);
+    expect(valueUpliftFactor(1.2)).toBe(0);
 
     const full = planRenovation(building, undefined, 0.7);
-    expect(full.value.share).toBe(1);
-    expect(full.value.gain).toBeCloseTo(building.area * BUILDING_VALUE.perM2 * 0.4);
-    expect(full.value.annual).toBeCloseTo(full.value.gain * annuity(BUILDING_VALUE.years));
+    expect(full.value.renewed).toBeCloseTo(full.capex);
+    expect(full.value.gain).toBeCloseTo(full.capex * 0.3);
+    expect(full.value.annual).toBeCloseTo(full.value.gain * annuity(VALUE_UPLIFT.years));
     expect(full.before.valueGain).toBe(0);
     expect(full.after.valueGain).toBeCloseTo(full.value.annual);
     expect(planRenovation(building, undefined, 0.3).value.gain).toBeGreaterThan(full.value.gain);
+    expect(planRenovation(building, undefined, 1).value.gain).toBe(0);
 
     const partial = planRenovation(building, new Set(['facade', 'pac']), 0.7);
-    expect(partial.value.share).toBeCloseTo(partial.capex / full.capex);
-    expect(partial.value.gain).toBeCloseTo(full.value.gain * partial.value.share);
+    expect(partial.value.gain).toBeCloseTo(partial.capex * 0.3);
     expect(planRenovation(building, new Set(), 0.7).value.gain).toBe(0);
   });
 

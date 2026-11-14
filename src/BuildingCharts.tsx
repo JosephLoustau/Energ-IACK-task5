@@ -91,7 +91,7 @@ export default function BuildingCharts({ building, strategy, year = BASE_YEAR }:
           { label: 'Rénové', total: `${kchf(netCost(after))} CHF`, segments: costSegments(after) },
         ]} />
     </div>
-    {plan.value.gain > 0 && <p className="pv-note">Plus-value immobilière : {fmt(plan.value.gain)} CHF ({fmt(plan.value.factor * 100)} % de la valeur du bâtiment{plan.value.share < 0.999 ? ` × ${fmt(plan.value.share * 100)} % du paquet complet retenu` : ''}, état {fmt(plan.value.condition, 2)}) ; valeur {plan.value.basis === 'loyers' ? 'par capitalisation des loyers' : 'à neuf selon la SRE'} : {fmt(plan.value.base)} CHF ; annualisée : {fmt(plan.value.annual)} CHF/an.</p>}
+    {plan.value.gain > 0 && <p className="pv-note">Plus-value immobilière : {fmt(plan.value.gain)} CHF, soit la dépréciation regagnée ({fmt(plan.value.factor * 100)} % = 1 − état {fmt(plan.value.condition, 2)}) sur le coût des mesures retenues ({fmt(plan.value.renewed)} CHF) ; annualisée : {fmt(plan.value.annual)} CHF/an.</p>}
     {plan.rent.base === 0 && <p className="pv-note">Aucun loyer résidentiel renseigné pour ce bâtiment : pas de composante loyers.</p>}
     <p className="subsidy-note">Subventions non appliquées : cette feuille de route est établie pour la Ville de Genève elle-même, maître d’ouvrage et propriétaire des bâtiments.</p>
     {plan.pv.reason && <p className={`pv-note ${plan.pv.blocked ? 'blocked' : ''}`}><TriangleAlert size={14} /> {plan.pv.reason}</p>}
