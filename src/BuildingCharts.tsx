@@ -58,8 +58,8 @@ export default function BuildingCharts({ building, strategy, year = BASE_YEAR }:
   const renovation = renovationFor(building, year, strategy, DASHBOARD_LAST_YEAR);
   const { plan } = renovation;
   const { before, after } = plan;
-  // Coût net : coûts + loyers non perçus − hausse de loyer (recette).
-  const netCost = (side: typeof before) => side.total + side.rentLoss - side.rentGain;
+  // Coût net : coûts + loyers non perçus − hausse de loyer − plus-value annualisée (recettes).
+  const netCost = (side: typeof before) => side.total + side.rentLoss - side.rentGain - side.valueGain;
   const costSegments = (side: typeof before): Segment[] => [
     { value: side.energyCost, className: 'seg-energy', label: 'Énergie' },
     { value: side.envelopeCost, className: 'seg-envelope', label: 'Enveloppe thermique (annualisée)' },
@@ -67,13 +67,14 @@ export default function BuildingCharts({ building, strategy, year = BASE_YEAR }:
     { value: side.carbonCost, className: 'seg-carbon', label: 'Émissions carbone' },
     { value: side.rentLoss, className: 'seg-rent-loss', label: 'Manque à gagner de loyers (annualisé)' },
     { value: -side.rentGain, className: 'seg-rent-gain', label: 'Hausse de loyer (confort)' },
+    { value: -side.valueGain, className: 'seg-value-gain', label: 'Plus-value immobilière (annualisée)' },
   ];
   const decimals = (v: number) => (v < 10 ? 1 : 0);
   return <section className="building-charts" aria-label={`Avant / après rénovation : ${building.name}`}>
     <div className="charts-heading">
       <div><div className="section-label">AVANT / APRÈS RÉNOVATION</div><h2>{building.name}</h2>
         <p>{fmt(building.area)} m² SRE · {building.heating} · {DEPTHS[renovation.depth].label.toLowerCase()} : {plan.measures.filter((m) => m.included).map((m) => m.id === 'pac' ? 'PAC' : m.id === 'cad' ? 'CAD' : m.id).join(', ')}</p></div>
-      <div className="charts-legend" aria-hidden="true"><span><i className="seg-energy" />Énergie</span><span><i className="seg-envelope" />Enveloppe thermique</span><span><i className="seg-equipment" />Équipements techniques</span><span><i className="seg-carbon" />Carbone (200 CHF/tCO₂)</span><span><i className="seg-rent-loss" />Manque à gagner (+)</span><span><i className="seg-rent-gain" />Hausse de loyer (−)</span></div>
+      <div className="charts-legend" aria-hidden="true"><span><i className="seg-energy" />Énergie</span><span><i className="seg-envelope" />Enveloppe thermique</span><span><i className="seg-equipment" />Équipements techniques</span><span><i className="seg-carbon" />Carbone (200 CHF/tCO₂)</span><span><i className="seg-rent-loss" />Manque à gagner (+)</span><span><i className="seg-rent-gain" />Hausse de loyer (−)</span><span><i className="seg-value-gain" />Plus-value (−)</span></div>
     </div>
     <div className="charts-grid">
       <BarChart title="IDC" unit="MJ/m²/an" ariaLabel="IDC actuel et rénové" columns={[
@@ -84,12 +85,13 @@ export default function BuildingCharts({ building, strategy, year = BASE_YEAR }:
         { label: 'Actuel', total: fmt(before.carbon, decimals(before.carbon)), segments: [{ value: before.carbon, className: 'seg-renovation', label: 'CO₂' }] },
         { label: 'Rénové', total: fmt(after.carbon, decimals(after.carbon)), segments: [{ value: after.carbon, className: 'seg-renovation', label: 'CO₂' }] },
       ]} />
-      <BarChart title="Coûts annuels" unit="CHF/an" ariaLabel="Coûts annuels actuels et rénovés : énergie, enveloppe, équipements, carbone et loyers"
-        negativeLabel={(column) => column.label === 'Rénové' ? `−${kchf(after.rentGain)}` : ''} columns={[
+      <BarChart title="Coûts annuels" unit="CHF/an" ariaLabel="Coûts annuels actuels et rénovés : énergie, enveloppe, équipements, carbone, loyers et plus-value"
+        negativeLabel={(column) => column.label === 'Rénové' ? `−${kchf(after.rentGain + after.valueGain)}` : ''} columns={[
           { label: 'Actuel', total: `${kchf(netCost(before))} CHF`, segments: costSegments(before) },
           { label: 'Rénové', total: `${kchf(netCost(after))} CHF`, segments: costSegments(after) },
         ]} />
     </div>
+    {plan.value.gain > 0 && <p className="pv-note">Plus-value immobilière : {fmt(plan.value.gain)} CHF ({fmt(plan.value.factor * 100)} % de la valeur du bâtiment{plan.value.share < 0.999 ? ` × ${fmt(plan.value.share * 100)} % du paquet complet retenu` : ''}, état {fmt(plan.value.condition, 2)}) ; valeur {plan.value.basis === 'loyers' ? 'par capitalisation des loyers' : 'à neuf selon la SRE'} : {fmt(plan.value.base)} CHF ; annualisée : {fmt(plan.value.annual)} CHF/an.</p>}
     {plan.rent.base === 0 && <p className="pv-note">Aucun loyer résidentiel renseigné pour ce bâtiment : pas de composante loyers.</p>}
     <p className="subsidy-note">Subventions non appliquées : cette feuille de route est établie pour la Ville de Genève elle-même, maître d’ouvrage et propriétaire des bâtiments.</p>
     {plan.pv.reason && <p className={`pv-note ${plan.pv.blocked ? 'blocked' : ''}`}><TriangleAlert size={14} /> {plan.pv.reason}</p>}

@@ -4,6 +4,9 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/).
 
 ## [Non publié]
 
+### Ajouté
+- Plus-value immobilière de la rénovation (`src/renovation.ts`, `BUILDING_VALUE`, hypothèses modèle) : part de la valeur du bâtiment regagnée, linéaire selon l'indice d'état de l'année des travaux, de 0,2 (état 1) à 0,6 (état ≤ 0,4). Valeur du bâtiment : loyers résidentiels capitalisés à 4 % s'ils sont renseignés, sinon 4 000 CHF/m² SRE. Appliquée au prorata du coût du paquet complet retenu, annualisée à 3 % sur 30 ans et tracée sous l'axe du graphique « Coûts annuels » comme recette (déduite du coût net). Montant, facteur et base affichés sous le graphique ; aide « Plus-value immobilière ».
+
 ### Corrigé
 - Graphique « Coûts annuels » (onglet « Mesures de rénovation » et `BuildingCharts`) : le manque à gagner de loyers est un coût, tracé au-dessus de l'axe ; la hausse de loyer est une recette, tracée en dessous. Le total affiché est le coût net (coûts + manque à gagner − hausse de loyer) ; auparavant la hausse de loyer était ajoutée aux coûts et le manque à gagner ignoré.
 

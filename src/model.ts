@@ -302,7 +302,7 @@ export function renovationFor(building: Building, year: number, strategy: Strate
   const conditionBefore = conditionAt(building, year);
   const build = (depth: RenovationDepth) => {
     const selection = packageFor(depth);
-    const plan = planRenovation(building, selection);
+    const plan = planRenovation(building, selection, conditionBefore);
     const residual = firstBreachAfterWorks(building, plan.after, depth, strategy, year, lastYear);
     return { depth, selection, plan, residual };
   };

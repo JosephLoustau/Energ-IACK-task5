@@ -94,6 +94,26 @@ export const PV = {
 };
 /** Loyers : 1 année de loyers perdue pendant les travaux, répartie sur 30 ans ; hausse de loyer pour le confort (hypothèse modèle). */
 export const RENT = { lossYears: 1, spreadYears: 30, comfortUplift: 0.10 };
+/**
+ * Plus-value immobilière (hypothèses modèle, non sourcées) : part de la valeur du bâtiment regagnée par la rénovation,
+ * d'autant plus grande que le bâtiment est vétuste. Facteur linéaire en fonction de l'indice d'état de l'année des
+ * travaux : `factorNew` (0,2) pour un état ≥ `conditionNew` (1, neuf) et `factorWorn` (0,6) pour un état ≤ `conditionWorn`
+ * (0,4, état d'un bâtiment de 70 ans, coude du modèle de dégradation). Appliqué au prorata du coût du paquet complet
+ * réellement retenu, puis annualisé à DISCOUNT_RATE sur `years` ans.
+ * Valeur du bâtiment : capitalisation des loyers résidentiels (loyer annuel / `capRate`) si ceux-ci sont renseignés,
+ * sinon SRE × `perM2` (valeur à neuf).
+ */
+export const BUILDING_VALUE = { capRate: 0.04, perM2: 4000, factorNew: 0.2, factorWorn: 0.6, conditionNew: 1, conditionWorn: 0.4, years: 30 };
+/** Facteur de plus-value (part de la valeur du bâtiment) selon l'indice d'état de l'année des travaux. */
+export function valueUpliftFactor(condition: number, p = BUILDING_VALUE) {
+  const t = Math.min(1, Math.max(0, (p.conditionNew - condition) / (p.conditionNew - p.conditionWorn)));
+  return p.factorNew + t * (p.factorWorn - p.factorNew);
+}
+/** Valeur du bâtiment (CHF) : capitalisation des loyers résidentiels, sinon SRE × valeur à neuf par m². */
+export function buildingValue(building: Building, p = BUILDING_VALUE): { value: number; basis: 'loyers' | 'sre' } {
+  const rent = building.rentResidential ?? 0;
+  return rent > 0 ? { value: rent / p.capRate, basis: 'loyers' } : { value: building.area * p.perM2, basis: 'sre' };
+}
 const ELECTRIC_HEATING = new Set(['Pompe à chaleur', 'Électrique']);
 const FOSSIL_OR_UNKNOWN = new Set(['Gaz', 'Mazout', 'Gaz + mazout', 'Inconnu']);
 
@@ -205,11 +225,13 @@ export interface Side {
   envelopeCost: number;
   equipmentCost: number;
   renovationCost: number;
-  /** Énergie + rénovation + carbone (hors loyers). */
+  /** Énergie + rénovation + carbone (hors loyers et plus-value). */
   total: number;
   /** Loyers : manque à gagner annualisé (≥ 0) et hausse de loyer annuelle (≥ 0). */
   rentLoss: number;
   rentGain: number;
+  /** Plus-value immobilière annualisée (≥ 0). */
+  valueGain: number;
 }
 
 export interface RenovationPlan {
@@ -226,14 +248,19 @@ export interface RenovationPlan {
   /** Carbone gris des mesures retenues : total (kgCO₂e), amorti sur la durée de vie de chaque mesure (kgCO₂e/an et kgCO₂e/m² SRE·an). */
   embodied: { total: number; annual: number; perM2Year: number };
   rent: { base: number; loss: number; gain: number; net: number };
+  /**
+   * Plus-value immobilière : valeur du bâtiment et sa base de calcul, facteur selon l'état, part du coût du paquet complet
+   * retenue, plus-value totale (CHF) et annualisée (CHF/an).
+   */
+  value: { base: number; basis: 'loyers' | 'sre'; condition: number; factor: number; share: number; gain: number; annual: number };
 }
 
 interface SideInput {
   finalKwhPerM2: number; carbon: number; heating: string;
-  envelopeCost?: number; equipmentCost?: number; pvKwh?: number; rentLoss?: number; rentGain?: number;
+  envelopeCost?: number; equipmentCost?: number; pvKwh?: number; rentLoss?: number; rentGain?: number; valueGain?: number;
 }
 function sideCosts(building: Building, input: SideInput): Side {
-  const { finalKwhPerM2, carbon, heating, envelopeCost = 0, equipmentCost = 0, pvKwh = 0, rentLoss = 0, rentGain = 0 } = input;
+  const { finalKwhPerM2, carbon, heating, envelopeCost = 0, equipmentCost = 0, pvKwh = 0, rentLoss = 0, rentGain = 0, valueGain = 0 } = input;
   const finalKwh = finalKwhPerM2 * building.area;
   const price = PRICE[heating] ?? 0.09;
   // L'électricité photovoltaïque autoconsommée remplace des imports (prix du réseau) moyennant l'entretien.
@@ -242,7 +269,7 @@ function sideCosts(building: Building, input: SideInput): Side {
   const renovationCost = envelopeCost + equipmentCost;
   return {
     idc: finalKwhPerM2 * carrierOf(heating).idcMjPerKwh, carbon, finalKwh, energyCost, carbonCost, envelopeCost, equipmentCost, renovationCost,
-    total: energyCost + carbonCost + renovationCost, rentLoss, rentGain,
+    total: energyCost + carbonCost + renovationCost, rentLoss, rentGain, valueGain,
   };
 }
 
@@ -253,7 +280,7 @@ export const MEASURE_IDS = ['facade', 'toit', 'cave', 'fenetres', 'pac', 'cad', 
  * `measures` liste toutes les mesures possibles avec leur drapeau `included`, et les coûts, économies,
  * émissions et loyers ne tiennent compte que des mesures incluses.
  */
-export function planRenovation(building: Building, selection?: ReadonlySet<string>): RenovationPlan {
+export function planRenovation(building: Building, selection?: ReadonlySet<string>, condition = building.condition): RenovationPlan {
   const isOn = (id: string) => !selection || selection.has(id);
   const area = building.area;
   const finalBefore = building.idc / carrierOf(building.heating).idcMjPerKwh;
@@ -366,14 +393,23 @@ export function planRenovation(building: Building, selection?: ReadonlySet<strin
   const worksInside = included.some((m) => m.category === 'enveloppe');
   const loss = worksInside ? base * RENT.lossYears / RENT.spreadYears : 0;
   const gain = worksInside ? base * RENT.comfortUplift : 0;
+
+  // Plus-value : facteur selon l'état × valeur du bâtiment, au prorata du coût du paquet complet (toutes mesures) retenu.
+  const fullCapex = selection ? planRenovation(building, undefined, condition).capex : capex;
+  const packageShare = fullCapex > 0 ? Math.min(1, capex / fullCapex) : 0;
+  const { value: valueBase, basis } = buildingValue(building);
+  const factor = valueUpliftFactor(condition);
+  const valueGain = valueBase * factor * packageShare;
+  const valueAnnual = valueGain * annuity(BUILDING_VALUE.years);
   return {
     measures, capex, heatPump, districtHeating, powerKw,
     pv: { kwc: pvOn ? kwc : 0, production, blocked: protectedBuilding, reason },
     rent: { base, loss, gain, net: gain - loss }, embodied,
+    value: { base: valueBase, basis, condition, factor, share: packageShare, gain: valueGain, annual: valueAnnual },
     before: sideCosts(building, { finalKwhPerM2: finalBefore, carbon: building.carbonIntensity, heating: building.heating }),
     after: sideCosts(building, {
       finalKwhPerM2: finalAfter, carbon: Math.min(carbonAfter, building.carbonIntensity), heating: heatingAfter,
-      envelopeCost: annual('enveloppe'), equipmentCost: annual('equipement'), pvKwh, rentLoss: loss, rentGain: gain,
+      envelopeCost: annual('enveloppe'), equipmentCost: annual('equipement'), pvKwh, rentLoss: loss, rentGain: gain, valueGain: valueAnnual,
     }),
   };
 }
