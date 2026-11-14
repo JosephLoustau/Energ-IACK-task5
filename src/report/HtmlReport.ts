@@ -50,7 +50,7 @@ export class HtmlReport {
         horizonYear: PLANNING.horizonYear,
         firstWorksYear: PLANNING.firstWorksYear,
         selectedStrategy,
-        fileName: `stratoreno-feuille-de-route-${selectedStrategy}-${(this.options.generatedAt ?? new Date()).toISOString().slice(0, 10)}`,
+        fileName: `decathlon-geneve-${(this.options.generatedAt ?? new Date()).toISOString().slice(0, 10)}`,
         defaultBudget: budgetKey(PLANNING.defaultBudget),
         budgets: PLANNING.budgetLevels.map((budget) => ({ key: budgetKey(budget), value: budget })),
         comfortLevels: PLANNING.comfortLevels.map(String),

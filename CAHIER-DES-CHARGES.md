@@ -1,4 +1,4 @@
-# Cahier des charges — StratoRéno, MVP stratégique
+# Cahier des charges — DeCathlon Genève, MVP stratégique
 
 ## Objectif
 

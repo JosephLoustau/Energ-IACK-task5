@@ -291,7 +291,7 @@
     return `<nav class="toolbar" aria-label="Paramètres du rapport"><div class="tb-inner">
       <div class="control"><span>Thermostat</span>${help('Qu’est-ce que le levier thermostat ?', T('helpThermostatTitle'), T('helpThermostat', { saving: nf(M.savingPerDegree * 100), year: M.baseYear }))}${seg(M.comfortLevels.map((c) => [c, c === '0' ? '0' : `−${c}`]), 'comfort', state.comfort)}<small>°C</small></div>
       <div class="control"><span>Budget</span>${seg(M.budgets.map((b) => [b.key, b.key === 'none' ? '∞' : nf(Number(b.key) / 1e6)]), 'budget', state.budget)}<small>MCHF/an</small></div>
-      <div class="control"><span>CSC</span>${help('Qu’est-ce que le coût social du carbone ?', T('helpSccTitle'), T('helpScc', { year: M.baseYear, horizon: M.horizonYear, defaultScc: M.defaultScc }))}<input type="number" id="scc" min="0" step="1" value="${state.scc}" aria-label="Coût social du carbone en CHF par tonne"><small>CHF/t</small></div>
+      <div class="control"><span>CSC</span>${help('Qu’est-ce que le coût social du carbone ?', T('helpSccTitle'), T('helpScc', { year: M.baseYear, horizon: M.horizonYear, defaultScc: M.defaultScc }))}<input type="number" id="scc" min="0" step="1" value="${state.scc}" aria-label="Coût social du carbone en CHF par tonne"><small>CHF/tCO₂</small></div>
       <div class="actions-right">${edits ? `<button class="btn ghost" data-action="reset-texts" title="Revenir aux textes générés">Rétablir (${edits})</button>` : ''}<button class="btn ghost" data-action="edit" aria-pressed="${state.editing}">${state.editing ? '✓ Terminer' : '✎ Modifier le texte'}</button><button class="btn primary" data-action="html">Télécharger</button></div>
     </div></nav>`;
   }

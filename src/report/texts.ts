@@ -19,7 +19,7 @@ export const REPORT_TEXTS = {
   kpiInvestment: 'Investissement',
   kpiInvestmentSub: '{count} bâtiments, {budget}', // {count} {budget}
   kpiFullCost: 'Coût complet',
-  kpiFullCostSub: 'avec le CO₂ émis à {scc} CHF/t', // {scc}
+  kpiFullCostSub: 'avec le CO₂ émis à {scc} CHF/tCO₂', // {scc}
   kpiEmissions: 'Émissions',
   kpiEmissionsSub: '{avoided}/an évitées', // {avoided}
   kpiEnd: 'Fin des travaux',
@@ -68,9 +68,9 @@ export const REPORT_TEXTS = {
   s3Figure: 'Émissions annuelles du parc selon la stratégie',
   s3FigureSource: 'Budget {budget}, {thermostat}.', // {budget} {thermostat}
   s3PerTonne: 'Chaque tonne évitée en plus coûte environ <b>{perTonne} CHF</b>. ', // {perTonne}
-  s3Worth: 'Avec un coût social du carbone de {scc} CHF/t, l’ambition <b>est rentable pour la société</b>.', // {scc}
+  s3Worth: 'Avec un coût social du carbone de {scc} CHF/tCO₂, l’ambition <b>est rentable pour la société</b>.', // {scc}
   // {scc} {horizon}
-  s3NotWorth: 'Avec un coût social du carbone de {scc} CHF/t, l’ambition ne le devient qu’au-delà de ce prix. '
+  s3NotWorth: 'Avec un coût social du carbone de {scc} CHF/tCO₂, l’ambition ne le devient qu’au-delà de ce prix. '
     + 'L’écart vient surtout de ce que le rapport ne compte pas : les économies d’énergie et les émissions évitées après {horizon}.',
   // {horizon}
   s3Sobriety: ' Attention : avec le thermostat abaissé, moins de bâtiments franchissent un seuil, et ceux qui sortent du programme gardent leur chauffage fossile. '

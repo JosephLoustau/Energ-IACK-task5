@@ -335,7 +335,7 @@ tbody tr:hover { background: #fffaf0; }
 .bar-chart { margin: 0; border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: #faf8f1; }
 .bar-chart figcaption { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; }
 .bar-chart figcaption span { color: var(--muted); font-size: 10px; }
-.bar-chart svg { width: 100%; height: auto; display: block; }
+.bar-chart svg { width: 100%; max-width: 210px; height: auto; display: block; margin: 0 auto; }
 .bar-chart .axis { stroke: var(--black); stroke-width: 1.5; }
 .bar-value { font: 700 13px 'Manrope', sans-serif; fill: var(--black); }
 .bar-chart .net-halo { stroke: #fff; stroke-width: 4; }
