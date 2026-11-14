@@ -343,6 +343,7 @@ rect.seg-renovation, i.seg-renovation { fill: var(--black); background: var(--bl
 rect.seg-envelope, i.seg-envelope { fill: #1e5b3a; background: #1e5b3a; stroke: var(--black); stroke-width: 1; }
 rect.seg-equipment, i.seg-equipment { fill: #93d5a4; background: #93d5a4; stroke: var(--black); stroke-width: 1; }
 rect.seg-rent-gain, i.seg-rent-gain { fill: #2b6cb0; background: #2b6cb0; stroke: var(--black); stroke-width: 1; }
+rect.seg-value-gain, i.seg-value-gain { fill: #81b4e0; background: #81b4e0; stroke: var(--black); stroke-width: 1; }
 rect.seg-rent-loss, i.seg-rent-loss { fill: var(--red); background: var(--red); stroke: var(--black); stroke-width: 1; }
 .chart-empty { font-size: 11px; color: var(--muted); padding: 60px 8px; text-align: center; }
 .pv-note { display: flex; align-items: center; gap: 6px; font-size: 11px; margin-top: 8px; padding: 7px 10px; border-radius: 6px; background: #efece3; }
