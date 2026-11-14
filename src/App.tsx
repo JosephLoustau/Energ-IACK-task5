@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import {
   ArrowRight, Building2, CalendarDays, Check, ChevronRight,
@@ -246,7 +246,15 @@ export default function App() {
     const strategies = strategyId === 'custom' ? [PRESETS.conservative, PRESETS.ambitious, custom] : [PRESETS.conservative, PRESETS.ambitious];
     void new HtmlReport({ buildings: BUILDINGS, strategies, selectedStrategy: strategy.id, scopeLabel: 'tout le parc' }).open();
   }
-  const onTourEnter = useCallback((action: 'tab-map' | 'tab-chart') => setTab(action === 'tab-map' ? 'map' : 'chart'), []);
+  const firstVisible = useRef<string | null>(null);
+  firstVisible.current = (program[0] ?? visible[0])?.building.id ?? null;
+  const onTourEnter = useCallback((action: 'tab-map' | 'tab-chart' | 'tab-measures') => {
+    if (action === 'tab-measures') {
+      // L'étape se concentre sur un bâtiment : on retient le premier de la feuille de route s'il n'y en a pas déjà un.
+      setSelected((current) => current ?? firstVisible.current);
+      setTab('measures');
+    } else setTab(action === 'tab-map' ? 'map' : 'chart');
+  }, []);
 
   return <div className="app-shell" data-strategy={strategyId}>
     <header className="topbar">
@@ -297,7 +305,7 @@ export default function App() {
               </button>)}
             </div>
           </div>
-          <button className="strategy-export-button" disabled={BUILDINGS.length === 0} onClick={exportReport} title="Ouvrir le rapport HTML de la stratégie pour tout le parc"><Download size={18} /> Exporter la stratégie</button>
+          <button className="strategy-export-button" data-tour="export" disabled={BUILDINGS.length === 0} onClick={exportReport} title="Ouvrir le rapport HTML de la stratégie pour tout le parc"><Download size={18} /> Exporter la stratégie</button>
           {strategyId === 'custom' && <div className="custom-base"><label htmlFor="custom-base">Partir du scénario</label><select id="custom-base" value={customBase} onChange={(event) => resetCustom(event.target.value === 'ambitious' ? 'ambitious' : 'conservative')}><option value="conservative">{PRESETS.conservative.name}</option><option value="ambitious">{PRESETS.ambitious.name}</option></select><small>Changer la base réinitialise les curseurs et les seuils futurs.</small></div>}
           <div data-tour="thresholds">
             <div className="threshold-heading"><h3>Seuils au 1er janvier {BASE_YEAR}</h3>{strategyId === 'custom' ? <button className="icon-button" aria-label="Réinitialiser la stratégie personnalisée" onClick={() => resetCustom()}><RotateCcw size={14} /></button> : <span className="fixed-tag">PRÉDÉFINIS</span>}</div>
@@ -340,7 +348,7 @@ export default function App() {
             <div className="view-body">
               <div className={`view-pane ${tab === 'map' ? '' : 'hidden'}`}><BuildingMap assessments={visible} selected={selectedAssessment?.building.id ?? null} active={tab === 'map'} onSelect={setSelected} /></div>
               {tab === 'chart' && <div className="view-pane"><ScatterPlot assessments={visible} selected={selectedAssessment?.building.id ?? null} strategy={strategy} year={chartYear} onSelect={setSelected} /></div>}
-              {tab === 'measures' && <div className="view-pane measures-pane">{selectedAssessment
+              {tab === 'measures' && <div className="view-pane measures-pane" data-tour="measures">{selectedAssessment
                 ? <RenovationTab key={`${selectedAssessment.building.id}|${strategy.id}`} assessment={selectedAssessment} strategy={strategy} onShowOnMap={() => setTab('map')} />
                 : <div className="empty-state"><Wrench size={27} /><h3>Aucun bâtiment sélectionné</h3><p>Choisissez un bâtiment sur la carte, dans le diagramme ou dans la feuille de route (pictogramme <Wrench size={12} />) pour étudier ses mesures de rénovation.</p></div>}</div>}
               {tab !== 'measures' && <Legend counts={counts} cohort={cohort} onCohort={(value) => { setCohort(value); setSelected(null); }} useCounts={useCounts} uses={uses} onToggleUse={toggleUse} onClearUses={() => setUses(new Set())} onResetFilters={resetFilters} />}

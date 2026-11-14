@@ -8,7 +8,7 @@ export interface TourStep {
   title: string;
   body: string;
   /** Action facultative exécutée en entrant dans l'étape (ex. changer d'onglet). */
-  onEnter?: 'tab-map' | 'tab-chart';
+  onEnter?: 'tab-map' | 'tab-chart' | 'tab-measures';
 }
 
 export const TOUR_STEPS: TourStep[] = [
@@ -18,5 +18,7 @@ export const TOUR_STEPS: TourStep[] = [
   { target: 'legend', title: 'Filtrez avec la légende', body: 'Cliquez sur une échéance pour n’afficher que ces bâtiments, ou sur une affectation pour isoler un type d’usage.' },
   { target: 'chart-tab', title: 'Passez au diagramme', body: 'IDC en abscisse, intensité carbone en ordonnée : repérez d’un coup d’œil les bâtiments hors seuils.', onEnter: 'tab-chart' },
   { target: 'kpis', title: 'Mesurez l’impact', body: 'Les widgets montrent l’investissement requis et le CO₂ évitable des travaux sélectionnés. L’IDC et l’état moyens sont pondérés par surface sur tout le parc, y compris les bâtiments sans travaux. Leur couleur suit le scénario : rouge pour Base légale, vert pour Exemplaire, bleu pour Modulable.' },
-  { target: 'roadmap', title: 'Consultez la feuille de route', body: 'La liste classe les bâtiments par échéance et critères. Le bouton « Exporter la stratégie », sous les scénarios, ouvre le rapport HTML pour tout le parc.' },
+  { target: 'roadmap', title: 'Consultez la feuille de route', body: 'La liste classe les bâtiments par échéance et critères. Les pictogrammes de droite ouvrent le bâtiment sur la carte ou dans ses mesures de rénovation.' },
+  { target: 'measures', title: 'Mesures de rénovation', body: 'Pour un bâtiment, cochez ou décochez les mesures (isolation, fenêtres, pompe à chaleur, photovoltaïque) : le coût et le graphe des coûts annuels (énergie, investissement, carbone, loyers) se recalculent aussitôt.', onEnter: 'tab-measures' },
+  { target: 'export', title: 'Exportez la stratégie', body: 'Le rapport HTML interactif regroupe la stratégie de tout le parc. Il embarque ses paramètres : seuils, scénarios et hypothèses peuvent y être modifiés directement, sans retourner dans l’application.', onEnter: 'tab-map' },
 ];
