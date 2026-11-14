@@ -36,8 +36,8 @@
   // Social cost of carbon: emissions baseYear–horizon valued at state.scc CHF/t, undiscounted.
   const carbonCost = (t) => state.scc * t;
   const fullCost = (p) => p.totalCost + carbonCost(p.cumulative);
-  const cohortOf = (due) => due === null ? 'safe' : due === M.baseYear ? 'now' : due <= M.baseYear + 5 ? 'five' : 'ten';
-  const COHORTS = { now: `Dès ${M.baseYear}`, five: `${M.baseYear + 1}–${M.baseYear + 5}`, ten: `${M.baseYear + 6}–${M.baseYear + 10}`, safe: 'Aucun seuil franchi' };
+  const cohortOf = (due) => due === null || due > M.baseYear + 10 ? 'safe' : due === M.baseYear ? 'now' : due <= M.baseYear + 5 ? 'five' : 'ten';
+  const COHORTS = { now: `Dès ${M.baseYear}`, five: `${M.baseYear + 1}–${M.baseYear + 5}`, ten: `${M.baseYear + 6}–${M.baseYear + 10}`, safe: `Aucun seuil d’ici ${M.baseYear + 10}` };
   const area = D.buildings.reduce((s, b) => s + b.area, 0);
 
   // ---------- SVG charts ----------
@@ -71,22 +71,31 @@
     return `<svg class="chart" viewBox="0 0 ${CW} ${CH}" role="img" aria-label="${esc(label)}"><text class="unit" x="${P.l - 8}" y="8" text-anchor="end">MCHF</text>${g}${bars}${capLine}</svg>`;
   }
   // Building map: shape = usage, size ∝ √SRE, colour given by `paint(i)`; 1st–99th percentile extent.
+  // Basemap (swisstopo, stitched at generation): one blob URL, so re-renders don't re-parse the image.
+  const BASEMAP = (() => {
+    try {
+      if (!M.map.image) return '';
+      const bin = atob(M.map.image.split(',')[1]), bytes = new Uint8Array(bin.length);
+      for (let k = 0; k < bin.length; k++) bytes[k] = bin.charCodeAt(k);
+      return URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }));
+    } catch { return ''; }
+  })();
+  // Web Mercator at the basemap zoom (same frame as the image), scaled to the chart width.
   function mapSvg(paint, tip, label) {
-    const q = (a, f) => { const s = [...a].sort((x, y) => x - y); return s[Math.floor(f * (s.length - 1))]; };
-    const lats = D.buildings.map((b) => b.lat), lons = D.buildings.map((b) => b.lon), m = 0.004;
-    const [la0, la1, lo0, lo1] = [q(lats, .01) - m, q(lats, .99) + m, q(lons, .01) - m, q(lons, .99) + m];
-    const inside = (b) => b.lat >= la0 && b.lat <= la1 && b.lon >= lo0 && b.lon <= lo1;
-    const k = Math.cos((la0 + la1) / 2 * Math.PI / 180), MW = CW, pad = 12;
-    const scale = (MW - 2 * pad) / ((lo1 - lo0) * k || 1), MH = (la1 - la0) * scale + 2 * pad;
-    const x = (lon) => pad + (lon - lo0) * k * scale, y = (lat) => pad + (la1 - lat) * scale;
+    const V = M.map, world = 256 * 2 ** V.zoom, scale = CW / V.width, MW = CW, MH = V.height * scale;
+    const x = (lon) => ((lon + 180) / 360 * world - V.x0) * scale;
+    const y = (lat) => { const r = lat * Math.PI / 180; return ((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * world - V.y0) * scale; };
+    const inside = (b) => { const px = x(b.lon), py = y(b.lat); return px >= 0 && px <= MW && py >= 0 && py <= MH; };
     const order = D.buildings.map((_, i) => i).filter((i) => inside(D.buildings[i])).sort((a, b) => D.buildings[b].area - D.buildings[a].area);
     const marks = order.map((i) => {
       const b = D.buildings[i], r = 2.4 + 6.5 * Math.sqrt(Math.min(b.area, 25000) / 25000);
       return `<path class="pt" d="${M.shapes[b.use]}" transform="translate(${x(b.lon).toFixed(1)} ${y(b.lat).toFixed(1)}) scale(${r.toFixed(2)})" style="fill:${paint(i)}" data-tip="${esc(tip(i))}"/>`;
     }).join('');
+    const base = BASEMAP ? `<image href="${BASEMAP}" width="${MW}" height="${MH.toFixed(1)}" preserveAspectRatio="none"/>` : '';
     const outside = D.buildings.length - order.length;
-    return { svg: `<svg class="chart map" viewBox="0 0 ${MW} ${MH.toFixed(0)}" role="img" aria-label="${esc(label)}">${marks}</svg>`, outside };
+    return { svg: `<svg class="chart map" viewBox="0 0 ${MW} ${MH.toFixed(0)}" role="img" aria-label="${esc(label)}">${base}${marks}</svg>`, outside };
   }
+  const credit = () => BASEMAP ? T('s1FigureCredit') : '';
   const shapeIcon = (use, fill = '#fff') => `<svg class="ico" viewBox="-1.3 -1.3 2.6 2.6" aria-hidden="true"><path d="${M.shapes[use]}" style="fill:${fill}"/></svg>`;
   const buildingTip = (i, extra) => { const b = D.buildings[i]; return `<b>${esc(b.name)}</b><div>${esc(b.district)} · ${esc(b.use)} · ${nf(b.area)} m²</div><div>${extra}</div>`; };
 
@@ -114,7 +123,7 @@
     ];
     const { svg, outside } = mapSvg(
       (i) => { const co = cohortOf(c.due[i]); return co === 'safe' ? safeFill : M.shades[co][Math.min(3, Math.max(1, c.triggers[i].length)) - 1]; },
-      (i) => buildingTip(i, c.due[i] ? `Premier seuil franchi en <b>${c.due[i]}</b> : ${c.triggers[i].map((t) => M.criteria[t]).join(', ')}` : `Aucun seuil franchi d’ici ${M.baseYear + 10}`),
+      (i) => buildingTip(i, c.due[i] ? `Premier seuil franchi en <b>${c.due[i]}</b> : ${c.triggers[i].map((t) => M.criteria[t]).join(', ')}` : `Aucun seuil franchi d’ici ${M.horizonYear}`),
       'Carte de la situation actuelle');
     const uses = Object.keys(M.shapes);
     const legend = `<div class="legend"><div>${['now', 'five', 'ten', 'safe'].map((k) => `<span><span class="sw">${(k === 'safe' ? [safeFill] : M.shades[k]).map((col) => `<i style="background:${col}"></i>`).join('')}</span>${COHORTS[k]} <b>${counts[k]}</b></span>`).join('')}</div><div>${uses.map((u) => `<span>${shapeIcon(u)}${esc(u)}</span>`).join('')}</div></div>`;
@@ -131,7 +140,7 @@
       ${ed('subtitle', T('coverSubtitle', { strategy: esc(s.name), thermostat: comfortLabel(state.comfort), budget: budgetLabel(state.budget), scope: esc(M.scopeLabel) }), 'p', 'claim')}
       <div class="kpi-band">${kpis.map(([v, k, sub]) => `<div><strong>${v}</strong><span>${k}</span><small>${sub}</small></div>`).join('')}</div>
       <section class="summary"><div class="eyebrow">${T('s1Eyebrow')}</div>${ed('summary', text)}</section>
-      ${figure(1, T('s1Figure', { year: M.baseYear }), T('s1FigureSource', { strategy: esc(s.name) }) + (outside ? T('s1FigureOutside', { outside }) : ''), svg, legend)}
+      ${figure(1, T('s1Figure', { year: M.baseYear }), T('s1FigureSource', { strategy: esc(s.name) }) + credit() + (outside ? T('s1FigureOutside', { outside }) : ''), svg, legend)}
       ${band('s1-read', T('s1Read'), T('s1ReadNote'))}
     `, 'first');
   }
@@ -157,12 +166,14 @@
       ${lots.map((l) => `<div class="g-row"><div class="g-label"><b>Lot ${l.y}</b><small>${l.count} bât. · ${mchf(l.cost)}</small></div><div class="g-track">${ph('study', Math.max(g0, l.y - 2), Math.max(1, l.y - 1 - Math.max(g0, l.y - 2)), 'Études')}${ph('tender', l.y - 1, 1, 'Appel d’offres')}${ph('works', l.y, 1, 'Travaux')}${ph('gain', l.y + 1, g1 - l.y, 'Gains effectifs')}</div></div>`).join('')}
       <div class="legend"><div><span><i class="ph study"></i>Études</span><span><i class="ph tender"></i>Appel d’offres</span><span><i class="ph works"></i>Travaux</span><span><i class="ph gain"></i>Gains effectifs</span></div></div></div>`;
     let acc = 0; const milestones = []; const targets = [.5, 1];
-    for (const w of [...p.works].sort((a, b) => a[1] - b[1])) { acc += w[3]; while (targets.length && acc >= targets[0] * p.carbonSaved - 1e-6) milestones.push([targets.shift(), w[1] + 1]); }
+    // Total from the same rounded per-building gains, so the 100 % milestone is always reached.
+    const total = p.works.reduce((sum, w) => sum + w[3], 0);
+    for (const w of [...p.works].sort((a, b) => a[1] - b[1])) { acc += w[3]; while (targets.length && acc >= targets[0] * total - 1e-6) milestones.push([targets.shift(), w[1] + 1]); }
     const immediate = p.works.filter((w) => cur().due[w[0]] === M.baseYear).length;
     const beyond = p.works.filter((w) => w[1] > M.horizonYear).length;
     return page(`
       ${head('s2', T('s2Eyebrow'), T('s2Title', { strategy: esc(s.name) }), T('s2Claim', { count: nf(p.works.length), firstYear: M.firstWorksYear, end: p.completionYear ?? '—', budget: budgetLabel(state.budget) }), T('s2Note'))}
-      ${figure(2, T('s2Figure'), T('s2FigureSource'), svg, legendMap)}
+      ${figure(2, T('s2Figure'), T('s2FigureSource') + credit(), svg, legendMap)}
       ${band('s2-pace', T('s2Pace', { immediate, year: M.baseYear, half: milestones[0]?.[1] ?? '—', full: milestones[1]?.[1] ?? '—' }), T('s2PaceNote'))}
     `) + page(`
       ${figure(3, T('s2Capex'), T('s2CapexSource', { year: M.baseYear }) + (beyond ? T('s2CapexBeyond', { beyond, horizon: M.horizonYear }) : ''), bars)}

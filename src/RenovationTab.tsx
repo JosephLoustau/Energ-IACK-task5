@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { MapPin, TriangleAlert } from 'lucide-react';
-import type { Building } from './model';
-import { DISCOUNT_RATE, ELECTRICITY_EMISSION, HEAT_PUMP_COP, MEASURE_IDS, PV, REALIZED_SHARE, RENT, SOCIAL_CARBON_COST, planRenovation } from './renovation';
+import { BASE_YEAR, DASHBOARD_LAST_YEAR, DEPTHS, describeBreach, describeDepth, inDashboardProgram, renovationFor } from './model';
+import type { Assessment, Strategy } from './model';
+import { DISCOUNT_RATE, ELECTRICITY_EMISSION, EMBODIED, HEAT_PUMP_COP, MEASURE_IDS, PV, REALIZED_SHARE, RENT, SOCIAL_CARBON_COST, planRenovation } from './renovation';
 
 const fmt = (value: number, digits = 0) => new Intl.NumberFormat('fr-CH', { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value);
 const kchf = (value: number) => value >= 1_000_000 ? `${fmt(value / 1_000_000, 2)} M` : value >= 10_000 ? `${fmt(value / 1000)} k` : fmt(value);
@@ -53,8 +54,13 @@ function BarChart({ title, unit, columns, ariaLabel, negativeLabel }: {
   </figure>;
 }
 
-export default function RenovationTab({ building, onShowOnMap }: { building: Building; onShowOnMap: () => void }) {
-  const [selection, setSelection] = useState<Set<string>>(() => new Set(MEASURE_IDS));
+export default function RenovationTab({ assessment, strategy, onShowOnMap }: { assessment: Assessment; strategy: Strategy; onShowOnMap: () => void }) {
+  const { building } = assessment;
+  // Paquet recommandé à l'échéance (ou en BASE_YEAR pour un bâtiment gris, sans travaux simulés au tableau de bord).
+  const worksYear = inDashboardProgram(assessment) ? assessment.dueYear! : BASE_YEAR;
+  const recommended = renovationFor(building, worksYear, strategy, DASHBOARD_LAST_YEAR);
+  const [selection, setSelection] = useState<Set<string>>(() => new Set(recommended.selection));
+  const isRecommended = selection.size === recommended.selection.size && [...selection].every((id) => recommended.selection.has(id));
   const plan = planRenovation(building, selection);
   const { before, after } = plan;
   const toggle = (id: string) => setSelection((current) => { const next = new Set(current); if (!next.delete(id)) next.add(id); return next; });
@@ -67,16 +73,19 @@ export default function RenovationTab({ building, onShowOnMap }: { building: Bui
     { value: -side.rentLoss, className: 'seg-rent-loss', label: 'Manque à gagner de loyers (annualisé)' },
   ];
   const included = plan.measures.filter((m) => m.included);
+  const carbonSavedPerYear = (before.carbon - after.carbon) * building.area / 1000;
   return <section className="renovation-tab" aria-label={`Mesures de rénovation : ${building.name}`}>
     <div className="charts-heading">
       <div><div className="section-label">MESURES DE RÉNOVATION</div><h2>{building.name}</h2>
-        <p>{fmt(building.area)} m² SRE · chauffage : {building.heating} · cochez les mesures à inclure, les coûts annuels s’adaptent.</p></div>
+        <p>{fmt(building.area)} m² SRE · chauffage : {building.heating} · cochez les mesures à inclure, les coûts annuels s’adaptent.</p>
+        <p className="depth-note" data-testid="recommended-depth"><strong>Paquet recommandé{inDashboardProgram(assessment) ? ` (travaux en ${worksYear})` : ` (sans échéance d’ici ${DASHBOARD_LAST_YEAR}, calculé pour ${worksYear})`} : {DEPTHS[recommended.depth].label.toLowerCase()}</strong> — {describeDepth(recommended, worksYear)}{recommended.residual ? ` Après ces travaux, un seuil reste dépassé (${describeBreach(recommended.residual)}).` : ''}{isRecommended ? '' : ' Sélection modifiée.'}</p></div>
       <button className="export-button" onClick={onShowOnMap}><MapPin size={14} /> Voir sur la carte</button>
     </div>
     <div className="renovation-body">
       <div className="measures-panel">
         <div className="measures-head"><strong>Coût estimé des mesures</strong><span>{kchf(plan.capex)} CHF</span></div>
         <div className="measures-actions">
+          <button className="text-button" onClick={() => setSelection(new Set(recommended.selection))} disabled={isRecommended}>Paquet recommandé</button>
           <button className="text-button" onClick={() => setSelection(new Set(MEASURE_IDS))}>Tout cocher</button>
           <button className="text-button" onClick={() => setSelection(new Set())}>Tout décocher</button>
         </div>
@@ -87,7 +96,8 @@ export default function RenovationTab({ building, onShowOnMap }: { building: Bui
               <span className={`measure-swatch ${m.category === 'enveloppe' ? 'seg-envelope' : 'seg-equipment'}`} aria-hidden="true" />
               <span className="measure-text">
                 <strong>{m.label}{m.proxy && <em className="proxy-tag">proxy</em>}</strong>
-                <small>{fmt(m.quantity, m.unit === 'm²' ? 0 : 1)} {m.unit} × {fmt(m.unitCost)} CHF/{m.unit} · {m.lifetime} ans · {fmt(m.annualCost)} CHF/an</small>
+                <small>{fmt(m.quantity, m.unit === 'm²' ? 0 : 1)} {m.unit} × {fmt(m.unitCost)} CHF/{m.unit} · {m.lifetime} ans · {fmt(m.annualCost)} CHF/an · carbone gris {fmt(m.embodiedCarbon / 1000, 1)} tCO₂e</small>
+                {m.detail && <small className="measure-detail">{m.detail}</small>}
                 {m.note && <small className="measure-note">{m.note}</small>}
                 <small className="measure-source">{m.source}</small>
               </span>
@@ -106,9 +116,10 @@ export default function RenovationTab({ building, onShowOnMap }: { building: Bui
           ]} />
       </div>
     </div>
+    <p className="pv-note">Carbone gris des mesures retenues : {fmt(plan.embodied.total / 1000, 1)} tCO₂e, soit {fmt(plan.embodied.perM2Year, 1)} kgCO₂e/m²·an amorti sur la durée de vie des mesures (valeur limite des rénovations importantes dès 2034 : {EMBODIED.legalLimitPerM2Year} kgCO₂e/m²·an, RECMC){carbonSavedPerYear > 0 ? ` ; compensé en ${fmt(plan.embodied.total / 1000 / carbonSavedPerYear, 1)} ans par le CO₂ d’exploitation évité` : ''}.</p>
     {plan.rent.base === 0 && <p className="pv-note">Aucun loyer résidentiel renseigné pour ce bâtiment : pas de composante loyers.</p>}
     <p className="subsidy-note">Subventions non appliquées : cette feuille de route est établie pour la Ville de Genève elle-même, maître d’ouvrage et propriétaire des bâtiments.</p>
     {plan.pv.reason && <p className={`pv-note ${plan.pv.blocked ? 'blocked' : ''}`}><TriangleAlert size={14} /> {plan.pv.reason}</p>}
-    <p className="measures-note">Hypothèses : prix 2020 hors subventions ; annuité à {fmt(DISCOUNT_RATE * 100, 0)} % ; économies d’enveloppe théoriques réalisées à {fmt(REALIZED_SHARE * 100, 0)} % ; PAC air/eau COP {HEAT_PUMP_COP} ; surfaces d’éléments déduites de la SRE (hypothèse modèle) ; coût social du carbone {SOCIAL_CARBON_COST} CHF/tCO₂ ; électricité {ELECTRICITY_EMISSION} kgCO₂/kWh ; PV {fmt(PV.costPerKwc)} CHF/kWc, {fmt(PV.yield)} kWh/kWc ; loyers : {RENT.lossYears} an de loyers perdu réparti sur {RENT.spreadYears} ans, hausse de confort +{fmt(RENT.comfortUplift * 100)} %, appliqués dès qu’une mesure d’enveloppe est retenue. Détail : docs/renovation/.</p>
+    <p className="measures-note">Hypothèses : prix 2020 hors subventions ; annuité à {fmt(DISCOUNT_RATE * 100, 0)} % ; économies d’enveloppe théoriques réalisées à {fmt(REALIZED_SHARE * 100, 0)} % ; PAC air/eau COP {HEAT_PUMP_COP} ; surfaces d’éléments déduites de la SRE (hypothèse modèle) : façade brute 1,0 m²/m² SRE, fenêtres = part vitrée de l’affectation × façade brute (Logement 20 %, Administration 60 %, autres affectations : hypothèses modèle) ; paquet recommandé selon la vétusté (rénovation complète si l’état est inférieur à 0,70, sinon énergétique sans façade ni fenêtres, sauf seuil encore dépassé) ; coût social du carbone {SOCIAL_CARBON_COST} CHF/tCO₂ ; électricité {ELECTRICITY_EMISSION} kgCO₂/kWh ; PV {fmt(PV.costPerKwc)} CHF/kWc, {fmt(PV.yield)} kWh/kWc ; loyers : {RENT.lossYears} an de loyers perdu réparti sur {RENT.spreadYears} ans, hausse de confort +{fmt(RENT.comfortUplift * 100)} %, appliqués dès qu’une mesure d’enveloppe est retenue. Détail : docs/renovation/.</p>
   </section>;
 }

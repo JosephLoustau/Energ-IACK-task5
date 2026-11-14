@@ -1,6 +1,7 @@
 import { BASE_YEAR, CRITERIA } from '../model';
 import type { Building, Strategy } from '../model';
 import { PLANNING, StrategyComparison } from './plan';
+import { Basemap } from './basemap';
 import { SHADES, SHAPES, shapeFor } from '../symbols';
 import { REPORT_TEXTS } from './texts';
 import type { ReportTexts } from './texts';
@@ -23,10 +24,19 @@ const round = (value: number, digits = 0) => Number(value.toFixed(digits));
 export class HtmlReport {
   readonly options: ReportOptions;
   readonly comparison: StrategyComparison;
+  readonly basemap: Basemap;
+  private basemapImage?: string;
 
   constructor(options: ReportOptions) {
     this.options = options;
     this.comparison = new StrategyComparison(options.buildings, options.strategies);
+    this.basemap = new Basemap(options.buildings.map((b) => ({ lat: b.coordinates[0], lon: b.coordinates[1] })));
+  }
+
+  /** Fetches the basemap image (network); without it the maps still render, on a plain background. */
+  async prepare() {
+    this.basemapImage = await this.basemap.image();
+    return this;
   }
 
   payload() {
@@ -51,6 +61,7 @@ export class HtmlReport {
         // Map symbols shared with the app: shape per usage, shades per cohort (1, 2, 3 criteria).
         shapes: Object.fromEntries([...new Set(buildings.map((b) => b.use))].map((use) => [use, SHAPES[shapeFor(use)]])),
         shades: SHADES,
+        map: { ...this.basemap.view, image: this.basemapImage ?? null },
       },
       years: this.comparison.years,
       baseline: round(this.comparison.baseline(), 1),
@@ -117,9 +128,13 @@ export class HtmlReport {
   }
 
   /** Opens the report in a new tab; the report itself offers HTML and CSV downloads. */
-  open() {
+  async open() {
+    // Tab opened before any await, so popup blockers still see a user click.
+    const tab = window.open('', '_blank');
+    tab?.document.write('<p style="font:14px Helvetica Neue,Arial,sans-serif;padding:24px">Préparation du rapport…</p>');
+    await this.prepare();
     const url = URL.createObjectURL(new Blob([this.render()], { type: 'text/html;charset=utf-8' }));
-    window.open(url, '_blank');
+    if (tab) tab.location.href = url; else window.open(url, '_blank');
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 }

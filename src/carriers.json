@@ -1,0 +1,10 @@
+{
+  "Gaz": { "idcMjPerKwh": 3.6, "emission": 0.198 },
+  "Mazout": { "idcMjPerKwh": 3.6, "emission": 0.265 },
+  "Gaz + mazout": { "idcMjPerKwh": 3.6, "emission": 0.23 },
+  "CAD": { "idcMjPerKwh": 3.89, "emission": 0.131 },
+  "Pompe à chaleur": { "idcMjPerKwh": 11.7, "emission": 0.097 },
+  "Électrique": { "idcMjPerKwh": 3.6, "emission": 0.097 },
+  "Bois / biogaz": { "idcMjPerKwh": 3.6, "emission": 0.0277 },
+  "Inconnu": { "idcMjPerKwh": 3.6, "emission": 0.198 }
+}

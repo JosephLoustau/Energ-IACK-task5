@@ -47,7 +47,7 @@ footer{color:var(--muted);font-size:13px;margin-top:32px}
 </ol>
 
 <h2 id="overview">1. Overview</h2>
-<p>The <b>Rapport HTML</b> button in the app's top bar builds a single, self-contained HTML file and opens it in a new tab. The file holds its own data, styles and script, so it works fully offline. It is laid out like an A4 document and prints to PDF cleanly.</p>
+<p>The <b>Rapport HTML</b> button in the app's top bar builds a single, self-contained HTML file and opens it in a new tab. The file holds its own data, styles and script, so it works fully offline. Only the generation needs a connection: <code>basemap.ts</code> downloads swisstopo grey tiles (<code>swisstlm3d-karte-grau</code>), stitches them into one faded JPEG and embeds it. If that fails (offline, 8 s timeout), the maps draw without a basemap. It is laid out like an A4 document and prints to PDF cleanly.</p>
 <p>The report covers the strategy selected in the app and the buildings that pass the app's filters (usage, search). Inside the report the reader can still change three levers (thermostat, annual budget, social cost of carbon), rewrite the text, and download the result.</p>
 
 <h2 id="files">2. Files</h2>

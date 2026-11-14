@@ -1,6 +1,7 @@
 import { ChevronDown, TriangleAlert } from 'lucide-react';
-import type { Building } from './model';
-import { DISCOUNT_RATE, ELECTRICITY_EMISSION, HEAT_PUMP_COP, PV, REALIZED_SHARE, RENT, SOCIAL_CARBON_COST, planRenovation } from './renovation';
+import { BASE_YEAR, DASHBOARD_LAST_YEAR, DEPTHS, renovationFor } from './model';
+import type { Building, Strategy } from './model';
+import { DISCOUNT_RATE, ELECTRICITY_EMISSION, HEAT_PUMP_COP, PV, REALIZED_SHARE, RENT, SOCIAL_CARBON_COST } from './renovation';
 
 const fmt = (value: number, digits = 0) => new Intl.NumberFormat('fr-CH', { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value);
 const kchf = (value: number) => value >= 1_000_000 ? `${fmt(value / 1_000_000, 2)} M` : value >= 10_000 ? `${fmt(value / 1000)} k` : fmt(value);
@@ -52,8 +53,10 @@ function BarChart({ title, unit, columns, ariaLabel, negativeLabel }: {
   </figure>;
 }
 
-export default function BuildingCharts({ building }: { building: Building }) {
-  const plan = planRenovation(building);
+/** Avant / après du paquet recommandé (profondeur selon la vétusté) pour des travaux en `year`. */
+export default function BuildingCharts({ building, strategy, year = BASE_YEAR }: { building: Building; strategy: Strategy; year?: number }) {
+  const renovation = renovationFor(building, year, strategy, DASHBOARD_LAST_YEAR);
+  const { plan } = renovation;
   const { before, after } = plan;
   const costSegments = (side: typeof before): Segment[] => [
     { value: side.energyCost, className: 'seg-energy', label: 'Énergie' },
@@ -67,7 +70,7 @@ export default function BuildingCharts({ building }: { building: Building }) {
   return <section className="building-charts" aria-label={`Avant / après rénovation : ${building.name}`}>
     <div className="charts-heading">
       <div><div className="section-label">AVANT / APRÈS RÉNOVATION</div><h2>{building.name}</h2>
-        <p>{fmt(building.area)} m² SRE · {building.heating} · paquet complet : {plan.measures.map((m) => m.id === 'pac' ? 'PAC' : m.id).join(', ')}</p></div>
+        <p>{fmt(building.area)} m² SRE · {building.heating} · {DEPTHS[renovation.depth].label.toLowerCase()} : {plan.measures.filter((m) => m.included).map((m) => m.id === 'pac' ? 'PAC' : m.id === 'cad' ? 'CAD' : m.id).join(', ')}</p></div>
       <div className="charts-legend" aria-hidden="true"><span><i className="seg-energy" />Énergie</span><span><i className="seg-envelope" />Enveloppe thermique</span><span><i className="seg-equipment" />Équipements techniques</span><span><i className="seg-carbon" />Carbone (200 CHF/tCO₂)</span><span><i className="seg-rent-gain" />Hausse de loyer (+)</span><span><i className="seg-rent-loss" />Manque à gagner (−)</span></div>
     </div>
     <div className="charts-grid">
@@ -93,15 +96,15 @@ export default function BuildingCharts({ building }: { building: Building }) {
       <div className="table-scroll"><table>
         <thead><tr><th>Mesure</th><th>Quantité</th><th>Coût unitaire</th><th>Coût</th><th>Durée de vie</th><th>Annualisé</th></tr></thead>
         <tbody>
-          {plan.measures.map((m) => <tr key={m.id}>
-            <td title={m.source}>{m.label}{m.proxy && <em className="proxy-tag">proxy</em>}<small>{m.source}</small></td>
+          {plan.measures.filter((m) => m.included).map((m) => <tr key={m.id}>
+            <td title={m.source}>{m.label}{m.proxy && <em className="proxy-tag">proxy</em>}{m.detail && <small>{m.detail}</small>}<small>{m.source}</small></td>
             <td>{fmt(m.quantity, m.unit === 'kW' ? 1 : 0)} {m.unit}</td>
             <td>{fmt(m.unitCost)} CHF/{m.unit}</td><td><strong>{fmt(m.cost)} CHF</strong></td><td>{m.lifetime} ans</td><td>{fmt(m.annualCost)} CHF/an</td>
           </tr>)}
           <tr className="total-row"><td>Total</td><td /><td /><td><strong>{fmt(plan.capex)} CHF</strong></td><td /><td>{fmt(after.renovationCost)} CHF/an</td></tr>
         </tbody>
       </table></div>
-      <p className="measures-note">Hypothèses : prix 2020 hors subventions (non appliquées : feuille de route de la Ville elle-même) ; annuité à {fmt(DISCOUNT_RATE * 100, 0)} % ; économies d’enveloppe théoriques réalisées à {fmt(REALIZED_SHARE * 100, 0)} % ; PAC air/eau COP {HEAT_PUMP_COP} ; surfaces d’éléments déduites de la SRE (hypothèse modèle) ; coût social du carbone {SOCIAL_CARBON_COST} CHF/tCO₂ ; électricité {ELECTRICITY_EMISSION} kgCO₂/kWh ; PV {fmt(PV.costPerKwc)} CHF/kWc, {fmt(PV.yield)} kWh/kWc ; loyers : {RENT.lossYears} an de loyers perdu réparti sur {RENT.spreadYears} ans, hausse de confort +{fmt(RENT.comfortUplift * 100)} %. Détail : docs/renovation/.</p>
+      <p className="measures-note">Hypothèses : prix 2020 hors subventions (non appliquées : feuille de route de la Ville elle-même) ; annuité à {fmt(DISCOUNT_RATE * 100, 0)} % ; économies d’enveloppe théoriques réalisées à {fmt(REALIZED_SHARE * 100, 0)} % ; PAC air/eau COP {HEAT_PUMP_COP} ; surfaces d’éléments déduites de la SRE, part vitrée selon l’affectation (hypothèse modèle) ; coût social du carbone {SOCIAL_CARBON_COST} CHF/tCO₂ ; électricité {ELECTRICITY_EMISSION} kgCO₂/kWh ; PV {fmt(PV.costPerKwc)} CHF/kWc, {fmt(PV.yield)} kWh/kWc ; loyers : {RENT.lossYears} an de loyers perdu réparti sur {RENT.spreadYears} ans, hausse de confort +{fmt(RENT.comfortUplift * 100)} %. Détail : docs/renovation/.</p>
     </details>
   </section>;
 }

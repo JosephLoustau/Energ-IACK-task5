@@ -1,5 +1,5 @@
 import { BASE_YEAR, assessPortfolio, renovationFor } from '../model';
-import type { Assessment, Building, Strategy, Thresholds } from '../model';
+import type { Assessment, Building, RenovationDepth, Strategy, Thresholds } from '../model';
 
 /** Planning hypotheses for the operational roadmap (to be validated with the City). */
 export const PLANNING = {
@@ -34,7 +34,11 @@ export interface ScheduledWork {
   carbonSaved: number;    // tCO2e/yr once completed
   carbonAfter: number;    // kgCO2e/m2/yr
   idcAfter: number;
-  residual: boolean;      // generic intervention leaves a threshold exceeded
+  depth: RenovationDepth; // recommended package: 'complete' or 'energy' (see renovationFor)
+  /** Recommended package still exceeds a threshold in force between the works year and the horizon (same rule as the depth escalation). */
+  residual: boolean;
+  /** First threshold still exceeded after works: year and criteria, or null. */
+  residualBreach: { year: number; criteria: string[] } | null;
 }
 
 export interface PlanSeries {
@@ -53,17 +57,18 @@ export class RoadmapPlanner {
     this.firstWorksYear = firstWorksYear;
   }
 
-  schedule(assessments: Assessment[], indexOf: Map<string, number>, finalThresholds: Thresholds): ScheduledWork[] {
+  /** Costs and residual checks use the recommended package of `strategy`, checked up to `lastYear` (the report horizon). */
+  schedule(assessments: Assessment[], indexOf: Map<string, number>, strategy: Strategy, lastYear = PLANNING.horizonYear): ScheduledWork[] {
     const spent = new Map<number, number>();
     const works: ScheduledWork[] = [];
     for (const item of assessments) {
       if (item.dueYear === null) continue;
       let year = Math.max(item.dueYear, this.firstWorksYear);
-      let renovation = renovationFor(item.building, year);
+      let renovation = renovationFor(item.building, year, strategy, lastYear);
       // An empty year always accepts a building, even above the cap, so the loop terminates.
       while (this.budget !== null && (spent.get(year) ?? 0) > 0 && (spent.get(year) ?? 0) + renovation.cost > this.budget) {
         year += 1;
-        renovation = renovationFor(item.building, year);
+        renovation = renovationFor(item.building, year, strategy, lastYear);
       }
       spent.set(year, (spent.get(year) ?? 0) + renovation.cost);
       works.push({
@@ -74,8 +79,9 @@ export class RoadmapPlanner {
         carbonSaved: renovation.carbonSaved,
         carbonAfter: renovation.carbonAfter,
         idcAfter: renovation.idcAfter,
-        residual: renovation.idcAfter > finalThresholds.idc || renovation.carbonAfter > finalThresholds.carbon
-          || renovation.conditionAfter < finalThresholds.condition,
+        depth: renovation.depth,
+        residual: renovation.residual !== null,
+        residualBreach: renovation.residual && { year: renovation.residual.year, criteria: renovation.residual.criteria },
       });
     }
     return works;
@@ -137,11 +143,11 @@ export class StrategyComparison {
     for (const comfort of comfortLevels) {
       const adjusted = withComfort(buildings, comfort);
       for (const strategy of strategies) {
-        const assessments = assessPortfolio(adjusted, strategy);
-        const finalThresholds = finalThresholdsOf(strategy);
+        // Scanned up to the horizon, so buildings first exceeding a threshold after the dashboard's 10 years are scheduled too.
+        const assessments = assessPortfolio(adjusted, strategy, PLANNING.horizonYear, PLANNING.horizonYear);
         this.assessments.set(`${strategy.id}|${comfort}`, assessments);
         for (const budget of budgets) {
-          const works = new RoadmapPlanner(budget).schedule(assessments, indexOf, finalThresholds);
+          const works = new RoadmapPlanner(budget).schedule(assessments, indexOf, strategy);
           this.plans.set(`${strategy.id}|${comfort}|${budget}`, new ScenarioPlan(adjusted, works, this.years));
         }
       }
@@ -157,6 +163,7 @@ export class StrategyComparison {
   baseline(comfort = 0) { return baselineEmissions(withComfort(this.buildings, comfort)); }
 }
 
+/** Thresholds of the last calendar step (not necessarily the strictest: the residual check scans every year instead). */
 export function finalThresholdsOf(strategy: Strategy): Thresholds {
   return [...strategy.changes].sort((a, b) => b.year - a.year)[0]?.thresholds ?? strategy.thresholds;
 }

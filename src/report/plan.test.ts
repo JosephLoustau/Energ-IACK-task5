@@ -20,29 +20,54 @@ const assessments = assessPortfolio(stock, PRESETS.conservative);
 
 describe('RoadmapPlanner', () => {
   it('starts works no earlier than the first works year and skips safe buildings', () => {
-    const works = new RoadmapPlanner(null).schedule(assessments, indexOf, PRESETS.conservative.thresholds);
+    const works = new RoadmapPlanner(null).schedule(assessments, indexOf, PRESETS.conservative);
     expect(works.map((w) => stock[w.index]!.id).sort()).toEqual(['A', 'B']);
     expect(works.every((w) => w.worksYear === PLANNING.firstWorksYear)).toBe(true);
   });
 
   it('pushes buildings to later years when the annual budget is exhausted, with costs at the works year', () => {
-    const costA = renovationFor(stock[0]!, PLANNING.firstWorksYear).cost;
-    const works = new RoadmapPlanner(costA + 1).schedule(assessments, indexOf, PRESETS.conservative.thresholds);
+    const costA = renovationFor(stock[0]!, PLANNING.firstWorksYear, PRESETS.conservative, PLANNING.horizonYear).cost;
+    const works = new RoadmapPlanner(costA + 1).schedule(assessments, indexOf, PRESETS.conservative);
     const years = works.map((w) => w.worksYear).sort();
     expect(years).toEqual([PLANNING.firstWorksYear, PLANNING.firstWorksYear + 1]);
     const late = works.find((w) => w.worksYear > PLANNING.firstWorksYear)!;
-    expect(late.cost).toBeCloseTo(renovationFor(stock[late.index]!, late.worksYear).cost);
+    expect(late.cost).toBeCloseTo(renovationFor(stock[late.index]!, late.worksYear, PRESETS.conservative, PLANNING.horizonYear).cost);
+  });
+
+  it('uses the recommended package and flags residuals with the same rule up to the horizon', () => {
+    const works = new RoadmapPlanner(null).schedule(assessments, indexOf, PRESETS.ambitious);
+    for (const work of works) {
+      const renovation = renovationFor(stock[work.index]!, work.worksYear, PRESETS.ambitious, PLANNING.horizonYear);
+      expect(work.depth).toBe(renovation.depth);
+      expect(work.cost).toBeCloseTo(renovation.cost);
+      expect(work.residual).toBe(renovation.residual !== null);
+      expect(work.residualBreach?.year ?? null).toBe(renovation.residual?.year ?? null);
+    }
   });
 
   it('places a building above the cap alone in an empty year', () => {
-    const works = new RoadmapPlanner(1).schedule(assessments, indexOf, PRESETS.conservative.thresholds);
+    const works = new RoadmapPlanner(1).schedule(assessments, indexOf, PRESETS.conservative);
     expect(new Set(works.map((w) => w.worksYear)).size).toBe(works.length);
+  });
+});
+
+describe('Roadmap beyond the dashboard horizon', () => {
+  it('schedules a building first exceeding a threshold after 2036 and keeps its gain in the series', () => {
+    const late = [building('L', { idc: 400, carbonIntensity: 3, condition: 0.95 })];
+    const comparison = new StrategyComparison(late, [PRESETS.ambitious], [null], [0]);
+    expect(comparison.assessments.get('ambitious|0')![0]!.dueYear).toBe(2040);
+    const plan = comparison.plan('ambitious', null);
+    expect(plan.works.map((w) => w.worksYear)).toEqual([2040]);
+    const at = (year: number) => plan.series.emissions[comparison.years.indexOf(year)]!;
+    expect(at(2040)).toBeCloseTo(baselineEmissions(late));
+    expect(at(2041)).toBeCloseTo(baselineEmissions(late) - plan.carbonSaved);
+    expect(comparison.years.at(-1)).toBe(PLANNING.horizonYear);
   });
 });
 
 describe('ScenarioPlan', () => {
   it('counts the CO2 gain from the year after works, and never double counts', () => {
-    const works = new RoadmapPlanner(null).schedule(assessments, indexOf, PRESETS.conservative.thresholds);
+    const works = new RoadmapPlanner(null).schedule(assessments, indexOf, PRESETS.conservative);
     const years = [BASE_YEAR, BASE_YEAR + 1, BASE_YEAR + 2, BASE_YEAR + 3, BASE_YEAR + 4];
     const plan = new ScenarioPlan(stock, works, years);
     const base = baselineEmissions(stock);

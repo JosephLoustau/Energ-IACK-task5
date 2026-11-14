@@ -5,7 +5,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import { AlertTriangle, Box, LocateFixed, Map as MapIcon } from 'lucide-react';
 import { BUILDINGS } from './data';
-import { COHORTS } from './model';
+import { COHORTS, describeDue } from './model';
 import type { Assessment } from './model';
 import { ICON_COLORS, SHAPES, SHAPE_NAMES, criteriaOf, iconKey, markerColor, shapeFor, shapePolygon, symbolScale } from './symbols';
 
@@ -112,6 +112,9 @@ function shapeRing(shape: [number, number][], lng: number, lat: number, r: numbe
   return [[...ring, ring[0]!]];
 }
 
+/** Infobulle : affectation, catégorie et premier dépassement (année, critère, seuil), y compris après 2036 pour le gris. */
+const popupInfo = (item: Assessment) => [item.building.use, COHORTS[item.cohort].short, describeDue(item)].filter(Boolean).join(' · ');
+
 function toPins(assessments: Assessment[]) {
   const features: GeoJSON.Feature<GeoJSON.Polygon>[] = [];
   for (const item of assessments) {
@@ -121,7 +124,7 @@ function toPins(assessments: Assessment[]) {
     const shape = shapePolygon(shapeFor(b.use));
     let z = (b.height ?? 6) + PIN_GAP;
     const color = item.cohort === 'safe' ? '#d9d9d9' : markerColor(item.cohort, criteriaOf(item));
-    const info = `${b.use} · ${COHORTS[item.cohort].short}`;
+    const info = popupInfo(item);
     for (const { scale, thick } of PIN_LEVELS) {
       features.push({
         type: 'Feature',
@@ -202,7 +205,7 @@ function toCollection(assessments: Assessment[]) {
       properties: {
         id: item.building.id,
         name: item.building.name,
-        info: `${item.building.use} · ${COHORTS[item.cohort].short}`,
+        info: popupInfo(item),
         icon: iconKey(item.building.use, markerColor(item.cohort, criteriaOf(item))),
         size: Number(symbolScale(item.building.area).toFixed(2)),
         sre: item.building.area,

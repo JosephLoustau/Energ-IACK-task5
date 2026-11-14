@@ -32,7 +32,8 @@ function heatingOf(text) {
   return 'Inconnu';
 }
 const FOSSIL = new Set(['Gaz', 'Mazout', 'Gaz + mazout']);
-const EMISSION = { 'Gaz': 0.198, 'Mazout': 0.265, 'Gaz + mazout': 0.23, 'CAD': 0.07, 'Pompe à chaleur': 0.025, 'Bois / biogaz': 0.03, 'Électrique': 0.025 };
+// Agents énergétiques : MJ d'IDC par kWh d'énergie finale (OCEN) et facteur d'émission ; sources dans src/renovation.ts.
+const CARRIERS = JSON.parse(readFileSync(new URL('../src/carriers.json', import.meta.url), 'utf8'));
 
 function centroid(ring) {
   let x = 0, y = 0;
@@ -62,25 +63,25 @@ const rows = geo.features.map((f) => {
 });
 
 const medianYear = median(rows.map((r) => r.year));
-const idcByUse = {}, co2ByUse = {};
+const idcByUse = {};
 for (const use of new Set(rows.map((r) => r.use))) {
   const group = rows.filter((r) => r.use === use);
   idcByUse[use] = median(group.map((r) => r.p.idc));
-  co2ByUse[use] = median(group.map((r) => r.p.co2_scope1));
 }
 const idcGlobal = median(rows.map((r) => r.p.idc));
-const co2Global = median(rows.map((r) => r.p.co2_scope1));
 
 const NOW = 2026;
 const buildings = rows.map(({ f, p, district, street, use, heating, year, yearEstimated }) => {
   const imputed = [];
   let idc = p.idc;
   if (!Number.isFinite(idc)) { idc = idcByUse[use] || idcGlobal; imputed.push('idc'); }
-  let carbon = p.co2_scope1;
-  if (!Number.isFinite(carbon)) {
-    carbon = EMISSION[heating] !== undefined ? idc / 3.6 * EMISSION[heating] : (co2ByUse[use] || co2Global);
-    imputed.push('carbon');
-  }
+  // CO₂ scope 1 + 2, calculé pour tous les bâtiments : IDC / (MJ d'IDC par kWh) × facteur d'émission de l'agent
+  // (combustion directe pour le gaz et le mazout, facteur du réseau pour l'électricité et le CAD). Le champ QuantHome
+  // `co2_scope1` n'est plus utilisé : ses facteurs étaient incohérents (p. ex. 120 bâtiments au gaz avec le facteur du mazout).
+  const carrier = CARRIERS[heating] ?? CARRIERS['Inconnu'];
+  const carbon = idc / carrier.idcMjPerKwh * carrier.emission;
+  // CO₂ estimé seulement si ses données d'entrée ne sont pas réelles : IDC imputé ou chauffage inconnu.
+  if (imputed.includes('idc') || heating === 'Inconnu') imputed.push('carbon');
   const constructionYear = year ?? medianYear;
   if (year === null || yearEstimated) imputed.push('year');
   // Indice d'état : calculé dans l'application (model.ts, courbe en S de l'âge effectif).
@@ -112,7 +113,8 @@ const buildings = rows.map(({ f, p, district, street, use, heating, year, yearEs
 writeFileSync(output, JSON.stringify(buildings));
 const count = (key) => buildings.filter((b) => b.imputed.includes(key)).length;
 console.log(`${buildings.length} bâtiments écrits dans ${output}`);
-console.log(`imputés — IDC: ${count('idc')}, CO₂: ${count('carbon')}, année: ${count('year')}`);
+console.log(`imputés — IDC: ${count('idc')}, CO₂ (IDC imputé ou chauffage inconnu): ${count('carbon')}, année: ${count('year')}`);
+console.log(`CO₂ scope 1 + 2 calculé pour ${buildings.length} bâtiments (IDC × facteur d'émission de l'agent, src/carriers.json)`);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) writeBuildings(JSON.parse(readFileSync(process.argv[2], 'utf8')));

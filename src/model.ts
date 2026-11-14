@@ -1,7 +1,12 @@
-import { planRenovation } from './renovation';
+import { MEASURE_IDS, planRenovation } from './renovation';
 
 export const BASE_YEAR = 2026;
+/** Année cible des calendriers de seuils et de la feuille de route du rapport (neutralité carbone, LCl). */
+export const TARGET_YEAR = 2050;
+/** Horizon du tableau de bord (catégories immédiat / 5 ans / 10 ans) ; le rapport planifie jusqu'à TARGET_YEAR. */
 export const MAX_HORIZON = 10;
+/** Dernière année des catégories colorées et de la fenêtre de vérification après travaux du tableau de bord (2036). */
+export const DASHBOARD_LAST_YEAR = BASE_YEAR + MAX_HORIZON;
 
 export type BuildingUse = 'École' | 'Musée' | 'Administration' | 'Sport' | 'Logement'
   | 'Éducation' | 'Logement mixte' | 'Commerce & ateliers' | 'Culture & loisirs' | 'Santé & social';
@@ -75,17 +80,43 @@ export interface Assessment {
 }
 
 export const PRESETS: Record<'conservative' | 'ambitious', Strategy> = {
+  /**
+   * Droit en vigueur (Data_legal/, inventaire GE-IDC-04 à 06) : travaux énergétiques ordonnés au-delà du seuil IDC de
+   * dépassement significatif, art. 14 al. 2 et 9 REn — 800 MJ/m²·an jusqu'au 31.12.2026, 650 dès 2027, 550 dès 2031.
+   * Aucune valeur limite légale de CO₂ d'exploitation par bâtiment : le seuil CO₂ est l'équivalent du seuil IDC au mazout
+   * (73,7 g/MJ, OFEV), donc jamais plus sévère que la loi. État : critère interne constant de 0,5.
+   */
   conservative: {
     id: 'conservative',
     name: 'Base légale',
-    thresholds: { condition: 0.5, idc: 600, carbon: 20 },
-    changes: [],
+    thresholds: { condition: 0.5, idc: 800, carbon: 59 },
+    changes: [
+      { year: 2027, thresholds: { condition: 0.5, idc: 650, carbon: 48 } },
+      { year: 2031, thresholds: { condition: 0.5, idc: 550, carbon: 41 } },
+    ],
   },
+  /**
+   * Objectifs jusqu'en 2050, neutralité carbone comprise (Data_legal/) :
+   *  - IDC 450 : Plan directeur de l'énergie 2020-2030, fiche 2.1 (rénover tout bâtiment au-delà de 450 MJ/m²·an) ;
+   *    IDC 230 en 2050 : cible après rénovation de ce même plan pour 2050.
+   *  - CO₂ 25 et 13 : équivalents au gaz (55,9 g/MJ, OFEV) de 450 et 230 MJ/m²·an ; 13 dès 2030 (sortie du fossile, fiche 2.2).
+   *  - 2050 : zéro net (loi fédérale sur le climat, LCl ; Stratégie climat de la Ville : 100 % renouvelable, sans compensation),
+   *    exprimé par un résidu de 1 kgCO₂e/m²·an car le facteur de l'électricité du réseau n'atteint pas exactement zéro.
+   *    Facteurs d'émission constants (CAD 0,131, électricité 0,097 kg/kWh) : ce seuil n'est pas atteint par un raccordement
+   *    au CAD, ni en général par une PAC ; ces bâtiments restent « à étudier » dans la feuille de route.
+   *  - 2040 (IDC 340, CO₂ 6) : interpolations linéaires entre 2030 et 2050, absentes des documents sources
+   *    (la LCl fixe −82 % pour le secteur du bâtiment en 2040).
+   * État : critère interne constant de 0,5. La Base légale reste inchangée : la loi ne programme rien après 2031.
+   */
   ambitious: {
     id: 'ambitious',
     name: 'Exemplaire',
-    thresholds: { condition: 0.7, idc: 450, carbon: 6 },
-    changes: [],
+    thresholds: { condition: 0.5, idc: 450, carbon: 25 },
+    changes: [
+      { year: 2030, thresholds: { condition: 0.5, idc: 450, carbon: 13 } },
+      { year: 2040, thresholds: { condition: 0.5, idc: 340, carbon: 6 } },
+      { year: 2050, thresholds: { condition: 0.5, idc: 230, carbon: 1 } },
+    ],
   },
 };
 
@@ -93,7 +124,7 @@ export const COHORTS: Record<Cohort, { label: string; short: string; color: stri
   now: { label: 'À traiter maintenant', short: 'Immédiat', color: '#d64a48', opacity: 1 },
   five: { label: 'À traiter d’ici 5 ans', short: 'Sous 5 ans', color: '#d4ad25', opacity: 1 },
   ten: { label: 'À traiter entre 5 et 10 ans', short: 'Sous 10 ans', color: '#329780', opacity: 1 },
-  safe: { label: 'Aucun besoin identifié à 10 ans · surveillance au-delà', short: 'Au-delà de 10 ans', color: '#827f7c', opacity: 0.3 },
+  safe: { label: `Aucun seuil dépassé d’ici ${BASE_YEAR + MAX_HORIZON} · surveillance`, short: 'Au-delà de 10 ans', color: '#827f7c', opacity: 0.3 },
 };
 
 export const CRITERIA: Record<Criterion, string> = {
@@ -115,9 +146,9 @@ export function validateStrategy(strategy: Strategy) {
   const years = new Set<number>();
   for (const change of strategy.changes) {
     assertThresholds(change.thresholds);
-    if (!Number.isInteger(change.year) || change.year <= BASE_YEAR || change.year > BASE_YEAR + MAX_HORIZON
+    if (!Number.isInteger(change.year) || change.year <= BASE_YEAR || change.year > TARGET_YEAR
       || years.has(change.year)) {
-      throw new Error('Chaque changement doit avoir une année distincte, entre 2027 et 2036.');
+      throw new Error(`Chaque changement doit avoir une année distincte, entre ${BASE_YEAR + 1} et ${TARGET_YEAR}.`);
     }
     years.add(change.year);
   }
@@ -178,15 +209,21 @@ export function triggeredCriteria(building: Building, thresholds: Thresholds, ye
   return triggers;
 }
 
-export function assessBuilding(building: Building, strategy: Strategy): Assessment {
-  for (let offset = 0; offset <= MAX_HORIZON; offset++) {
-    const year = BASE_YEAR + offset;
+/**
+ * Premier franchissement d'un seuil en vigueur l'année considérée, de BASE_YEAR à `lastYear` (par défaut TARGET_YEAR,
+ * pour le tableau de bord comme pour le rapport). Catégorie : 'now', 'five' ou 'ten' jusqu'à BASE_YEAR + MAX_HORIZON ;
+ * au-delà, 'safe' (gris) avec l'année du premier dépassement renseignée ; 'safe' et dueYear null si aucun seuil n'est
+ * franchi. Un bâtiment 'safe' n'entre pas au programme du tableau de bord (voir inDashboardProgram), même avec une année.
+ */
+export function assessBuilding(building: Building, strategy: Strategy, lastYear = TARGET_YEAR): Assessment {
+  for (let year = BASE_YEAR; year <= lastYear; year++) {
+    const offset = year - BASE_YEAR;
     const thresholds = thresholdsAt(strategy, year);
     const triggers = triggeredCriteria(building, thresholds, year);
     if (triggers.length > 0) {
       return {
         building,
-        cohort: offset === 0 ? 'now' : offset <= 5 ? 'five' : 'ten',
+        cohort: offset === 0 ? 'now' : offset <= 5 ? 'five' : offset <= MAX_HORIZON ? 'ten' : 'safe',
         dueYear: year,
         triggers,
         dueCondition: conditionAt(building, year),
@@ -196,27 +233,139 @@ export function assessBuilding(building: Building, strategy: Strategy): Assessme
   }
   return {
     building, cohort: 'safe', dueYear: null, triggers: [],
-    dueCondition: conditionAt(building, BASE_YEAR + MAX_HORIZON),
-    dueThresholds: thresholdsAt(strategy, BASE_YEAR + MAX_HORIZON),
+    dueCondition: conditionAt(building, lastYear),
+    dueThresholds: thresholdsAt(strategy, lastYear),
   };
 }
 
-export function renovationFor(building: Building, year: number) {
-  const plan = planRenovation(building);
+/** Le bâtiment a des travaux simulés dans le tableau de bord : premier dépassement d'ici 2036 (rouge, jaune, vert). */
+export const inDashboardProgram = (item: Assessment) => item.cohort !== 'safe' && item.dueYear !== null;
+
+/**
+ * Profondeur de la rénovation, selon la raison pour laquelle on rénove :
+ *  - 'complete' (rénovation complète) : toutes les mesures applicables — façade, toit, cave, fenêtres, changement de
+ *    chauffage s'il est fossile ou inconnu, photovoltaïque ; l'état repart à 1 ;
+ *  - 'energy' (rénovation énergétique) : changement de chauffage, photovoltaïque, isolation du toit et de la cave, sans
+ *    isolation de façade ni remplacement des fenêtres (réfection d'éléments usés, justifiée par la vétusté) ; l'état
+ *    est inchangé (indice de l'année des travaux, puis il continue de se dégrader).
+ * Règle (interprétation de la demande, hypothèse modèle) : complète si l'indice d'état de l'année des travaux est
+ * inférieur à DEEP_RENOVATION_CONDITION (reason 'condition') ; sinon énergétique, sauf si ce paquet laisse un seuil en
+ * vigueur dépassé entre l'année des travaux et la fin de la fenêtre (2036 au tableau de bord, 2050 dans le rapport) :
+ * alors complète (reason 'thresholds'). Une seule rénovation par bâtiment est modélisée.
+ */
+export const DEEP_RENOVATION_CONDITION = 0.7;
+export type RenovationDepth = 'complete' | 'energy';
+export type DepthReason = 'condition' | 'thresholds' | null;
+export const DEPTHS: Record<RenovationDepth, { label: string; short: string }> = {
+  complete: { label: 'Rénovation complète', short: 'complète' },
+  energy: { label: 'Rénovation énergétique', short: 'énergétique' },
+};
+/** Mesures exclues d'une rénovation énergétique : réfection de l'enveloppe usée. */
+export const WORN_ELEMENT_MEASURES = ['facade', 'fenetres'] as const;
+export const packageFor = (depth: RenovationDepth): Set<string> => new Set(depth === 'complete'
+  ? MEASURE_IDS : MEASURE_IDS.filter((id) => !(WORN_ELEMENT_MEASURES as readonly string[]).includes(id)));
+
+/** Premier dépassement d'un seuil en vigueur après travaux : année, critères, seuils de cette année. */
+export interface ThresholdBreach { year: number; criteria: Criterion[]; thresholds: Thresholds }
+
+/** Indice d'état projeté l'année `year` après des travaux de profondeur `depth` réalisés en `worksYear`. */
+export function conditionAfterWorks(building: Building, depth: RenovationDepth, worksYear: number, year: number) {
+  return depth === 'complete' ? conditionAtAge(year - worksYear) : conditionAt(building, Math.max(year, worksYear));
+}
+
+/**
+ * Règle commune à l'escalade de profondeur et au signalement « encore hors seuil après travaux » : compare l'IDC et le
+ * CO₂ après travaux (constants) et l'état projeté aux seuils en vigueur chaque année de `fromYear` à `toYear`, et renvoie
+ * le premier dépassement (équivalent à une comparaison avec les seuils les plus stricts de la période), ou null.
+ */
+export function firstBreachAfterWorks(
+  building: Building, after: { idc: number; carbon: number }, depth: RenovationDepth,
+  strategy: Strategy, fromYear: number, toYear: number,
+): ThresholdBreach | null {
+  for (let year = fromYear; year <= Math.max(fromYear, toYear); year++) {
+    const thresholds = thresholdsAt(strategy, year);
+    const criteria: Criterion[] = [];
+    if (after.idc > thresholds.idc) criteria.push('idc');
+    if (conditionAfterWorks(building, depth, fromYear, year) < thresholds.condition) criteria.push('condition');
+    if (after.carbon > thresholds.carbon) criteria.push('carbon');
+    if (criteria.length > 0) return { year, criteria, thresholds };
+  }
+  return null;
+}
+
+/**
+ * Rénovation recommandée d'un bâtiment rénové en `year` (paquet selon la profondeur, voir DEEP_RENOVATION_CONDITION),
+ * vérifiée contre les seuils de `strategy` jusqu'à `lastYear` (DASHBOARD_LAST_YEAR au tableau de bord, TARGET_YEAR
+ * dans le rapport). `residual` = premier seuil encore dépassé après travaux, ou null.
+ */
+export function renovationFor(building: Building, year: number, strategy: Strategy, lastYear = DASHBOARD_LAST_YEAR) {
   const conditionBefore = conditionAt(building, year);
+  const build = (depth: RenovationDepth) => {
+    const selection = packageFor(depth);
+    const plan = planRenovation(building, selection);
+    const residual = firstBreachAfterWorks(building, plan.after, depth, strategy, year, lastYear);
+    return { depth, selection, plan, residual };
+  };
+  let chosen: ReturnType<typeof build>;
+  let reason: DepthReason = null;
+  /** Dépassement laissé par le paquet énergétique, qui justifie l'escalade (reason 'thresholds'). */
+  let energyBreach: ThresholdBreach | null = null;
+  if (conditionBefore < DEEP_RENOVATION_CONDITION) {
+    chosen = build('complete');
+    reason = 'condition';
+  } else {
+    chosen = build('energy');
+    if (chosen.residual) {
+      energyBreach = chosen.residual;
+      chosen = build('complete');
+      reason = 'thresholds';
+    }
+  }
+  const { plan } = chosen;
   return {
     plan,
+    depth: chosen.depth,
+    reason,
+    energyBreach,
+    selection: chosen.selection,
+    residual: chosen.residual,
     cost: plan.capex,
     idcAfter: plan.after.idc,
     carbonAfter: plan.after.carbon,
     conditionBefore,
-    // Un bâtiment rénové repart à 1 (travaux < 10 ans).
-    conditionAfter: 1,
+    // Rénovation complète : état remis à 1 ; rénovation énergétique : état de l'année des travaux, inchangé.
+    conditionAfter: chosen.depth === 'complete' ? 1 : conditionBefore,
     carbonSaved: (building.carbonIntensity - plan.after.carbon) * building.area / 1000,
+    // Carbone gris des travaux (tCO₂e), hors des gains d'exploitation ci-dessus.
+    embodiedCarbon: plan.embodied.total / 1000,
   };
 }
+export type Renovation = ReturnType<typeof renovationFor>;
 
-export function compareAssessments(a: Assessment, b: Assessment) {
+const formatValue = (value: number, digits: number) => value.toFixed(digits).replace('.', ',');
+/** Texte d'un dépassement, p. ex. « 2040 : IDC > 340 ». */
+export function describeBreach(breach: Pick<ThresholdBreach, 'year' | 'criteria' | 'thresholds'>) {
+  const parts = breach.criteria.map((criterion) => criterion === 'idc' ? `IDC > ${breach.thresholds.idc}`
+    : criterion === 'carbon' ? `CO₂ > ${breach.thresholds.carbon}` : `état < ${formatValue(breach.thresholds.condition, 2)}`);
+  return `${breach.year} : ${parts.join(', ')}`;
+}
+/** Explication de la profondeur recommandée, pour l'interface. */
+export function describeDepth(renovation: Pick<Renovation, 'depth' | 'reason' | 'conditionBefore' | 'energyBreach'>, year: number) {
+  const condition = `état ${formatValue(renovation.conditionBefore, 2)}`;
+  const limit = formatValue(DEEP_RENOVATION_CONDITION, 2);
+  if (renovation.reason === 'condition') return `${DEPTHS.complete.label} : ${condition} < ${limit} en ${year} (vétusté).`;
+  if (renovation.reason === 'thresholds') return `${DEPTHS.complete.label} : ${condition} ≥ ${limit} en ${year}, mais la rénovation énergétique laisserait un seuil dépassé (${renovation.energyBreach ? describeBreach(renovation.energyBreach) : '—'}).`;
+  return `${DEPTHS.energy.label} : ${condition} ≥ ${limit} en ${year} ; façade et fenêtres conservées.`;
+}
+
+/** Premier dépassement d'un bâtiment à l'échéance, p. ex. « premier dépassement en 2040 : IDC > 340 ». */
+export function describeDue(item: Assessment) {
+  if (item.dueYear === null) return null;
+  return `premier dépassement en ${describeBreach({ year: item.dueYear, criteria: item.triggers, thresholds: item.dueThresholds })}`;
+}
+
+/** Ordre de priorité ; `carbonSaved` = gain carbone du paquet recommandé (départage), fourni par assessPortfolio. */
+export function compareAssessments(a: Assessment, b: Assessment, carbonSaved: (item: Assessment) => number) {
   const yearDifference = (a.dueYear ?? Infinity) - (b.dueYear ?? Infinity);
   if (Number.isFinite(yearDifference) && yearDifference !== 0) return yearDifference;
   if (a.dueYear === null && b.dueYear !== null) return 1;
@@ -225,27 +374,42 @@ export function compareAssessments(a: Assessment, b: Assessment) {
     const difference = Number(b.triggers.includes(criterion)) - Number(a.triggers.includes(criterion));
     if (difference !== 0) return difference;
   }
-  const carbonDifference = renovationFor(b.building, b.dueYear ?? BASE_YEAR).carbonSaved
-    - renovationFor(a.building, a.dueYear ?? BASE_YEAR).carbonSaved;
+  const carbonDifference = carbonSaved(b) - carbonSaved(a);
   return carbonDifference || a.building.id.localeCompare(b.building.id);
 }
 
-export function assessPortfolio(buildings: Building[], strategy: Strategy) {
+/**
+ * Évalue et trie le parc. `lastYear` = dernière année balayée (TARGET_YEAR par défaut) ; `worksWindowEnd` = fin de la
+ * fenêtre de vérification après travaux utilisée pour le paquet recommandé, donc pour le départage par gain carbone.
+ */
+export function assessPortfolio(buildings: Building[], strategy: Strategy, lastYear = TARGET_YEAR, worksWindowEnd = DASHBOARD_LAST_YEAR) {
   validateStrategy(strategy);
-  return buildings.map((building) => assessBuilding(building, strategy)).sort(compareAssessments);
+  const assessments = buildings.map((building) => assessBuilding(building, strategy, lastYear));
+  const gains = new Map<Assessment, number>();
+  const carbonSaved = (item: Assessment) => {
+    let gain = gains.get(item);
+    if (gain === undefined) {
+      gain = renovationFor(item.building, item.dueYear ?? BASE_YEAR, strategy, worksWindowEnd).carbonSaved;
+      gains.set(item, gain);
+    }
+    return gain;
+  };
+  return assessments.sort((a, b) => compareAssessments(a, b, carbonSaved));
 }
 
+/** Programme du tableau de bord : une catégorie, ou le cumul des échéances d'ici BASE_YEAR + horizon (jamais le gris). */
 export function selectProgram(assessments: Assessment[], horizon: number, cohort: Cohort | null) {
   return assessments.filter((item) => cohort !== null
     ? item.cohort === cohort
-    : item.dueYear !== null && item.dueYear <= BASE_YEAR + horizon);
+    : inDashboardProgram(item) && item.dueYear! <= BASE_YEAR + Math.min(horizon, MAX_HORIZON));
 }
 
-export function programMetrics(program: Assessment[]) {
-  const eligible = program.filter((item) => item.dueYear !== null);
+/** Indicateurs du programme, avec le paquet recommandé de chaque bâtiment ; les bâtiments gris n'ont pas de travaux. */
+export function programMetrics(program: Assessment[], strategy: Strategy, lastYear = DASHBOARD_LAST_YEAR) {
+  const eligible = program.filter(inDashboardProgram);
   const area = eligible.reduce((sum, item) => sum + item.building.area, 0);
   const totals = eligible.reduce((sum, item) => {
-    const renovation = renovationFor(item.building, item.dueYear ?? BASE_YEAR);
+    const renovation = renovationFor(item.building, item.dueYear!, strategy, lastYear);
     return {
       cost: sum.cost + renovation.cost,
       carbonBefore: sum.carbonBefore + item.building.carbonIntensity * item.building.area / 1000,
