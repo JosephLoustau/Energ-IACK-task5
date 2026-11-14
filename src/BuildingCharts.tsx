@@ -74,7 +74,7 @@ export default function BuildingCharts({ building, strategy, year = BASE_YEAR }:
     <div className="charts-heading">
       <div><div className="section-label">AVANT / APRÈS RÉNOVATION</div><h2>{building.name}</h2>
         <p>{fmt(building.area)} m² SRE · {building.heating} · {DEPTHS[renovation.depth].label.toLowerCase()} : {plan.measures.filter((m) => m.included).map((m) => m.id === 'pac' ? 'PAC' : m.id === 'cad' ? 'CAD' : m.id).join(', ')}</p></div>
-      <div className="charts-legend" aria-hidden="true"><span><i className="seg-energy" />Énergie</span><span><i className="seg-envelope" />Enveloppe thermique</span><span><i className="seg-equipment" />Équipements techniques</span><span><i className="seg-carbon" />Carbone (200 CHF/tCO₂)</span><span><i className="seg-rent-loss" />Manque à gagner (+)</span><span><i className="seg-rent-gain" />Hausse de loyer (−)</span><span><i className="seg-value-gain" />Plus-value (−)</span></div>
+      <div className="charts-legend" aria-hidden="true"><span><i className="seg-energy" />Énergie</span><span><i className="seg-envelope" />Enveloppe thermique</span><span><i className="seg-equipment" />Équipements techniques</span><span><i className="seg-carbon" />Carbone (200 CHF/tCO₂)</span><span><i className="seg-rent-loss" />Manque à gagner</span><span><i className="seg-rent-gain" />Hausse de loyer</span><span><i className="seg-value-gain" />Plus-value</span></div>
     </div>
     <div className="charts-grid">
       <BarChart title="IDC" unit="MJ/m²/an" ariaLabel="IDC actuel et rénové" columns={[

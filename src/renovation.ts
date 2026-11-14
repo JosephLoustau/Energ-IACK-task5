@@ -100,10 +100,14 @@ export const RENT = { lossYears: 1, spreadYears: 30, comfortUplift: 0.10 };
  * travaux : `factorNew` (0,2) pour un état ≥ `conditionNew` (1, neuf) et `factorWorn` (0,6) pour un état ≤ `conditionWorn`
  * (0,4, état d'un bâtiment de 70 ans, coude du modèle de dégradation). Appliqué au prorata du coût du paquet complet
  * réellement retenu, puis annualisé à DISCOUNT_RATE sur `years` ans.
- * Valeur du bâtiment : capitalisation des loyers résidentiels (loyer annuel / `capRate`) si ceux-ci sont renseignés,
- * sinon SRE × `perM2` (valeur à neuf).
+ * Valeur du bâtiment :
+ *  - loyers résidentiels renseignés : loyer annuel / `capRate`, taux de capitalisation des immeubles de logements fixé
+ *    par le Conseil d'État pour l'estimation fiscale des immeubles locatifs, 3,88 % pour l'année fiscale 2026
+ *    [RIPP2026, art. 25 al. 3] (valeur terrain compris) ;
+ *  - sinon SRE × `perM2` : coût du bâtiment (CFC 2) de 2 827 CHF/m² de surface de plancher SIA 416, logements de
+ *    l'OFCL à Vernier, prix d'octobre 2015 non indexés [OFCL2020] ; SP assimilée à la SRE (proxy, hors terrain).
  */
-export const BUILDING_VALUE = { capRate: 0.04, perM2: 4000, factorNew: 0.2, factorWorn: 0.6, conditionNew: 1, conditionWorn: 0.4, years: 30 };
+export const BUILDING_VALUE = { capRate: 0.0388, perM2: 2827, factorNew: 0.2, factorWorn: 0.6, conditionNew: 1, conditionWorn: 0.4, years: 30 };
 /** Facteur de plus-value (part de la valeur du bâtiment) selon l'indice d'état de l'année des travaux. */
 export function valueUpliftFactor(condition: number, p = BUILDING_VALUE) {
   const t = Math.min(1, Math.max(0, (p.conditionNew - condition) / (p.conditionNew - p.conditionWorn)));
