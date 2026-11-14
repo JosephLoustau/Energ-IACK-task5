@@ -95,6 +95,11 @@ npm run preview
    gains supposés. Le bouton coloré **Exporter la stratégie**, sous les scénarios
    et avant les curseurs, ouvre le rapport HTML pour l'ensemble du parc,
    avec la stratégie active présélectionnée, indépendamment des filtres.
+   Dans la barre du rapport, **Export PDF** ouvre l'impression du navigateur :
+   choisir **Enregistrer au format PDF** pour sauvegarder les pages A4 avec
+   les paramètres et textes affichés. **Export CSV** télécharge les données des
+   bâtiments avec les paramètres actifs (et le filtre de recherche de la liste,
+   s'il est renseigné). **Télécharger HTML** conserve le rapport interactif.
 
 Les filtres d'usage et de recherche s'appliquent à la carte, à la liste et
 aux travaux sélectionnés et à leurs coûts et gains. Les moyennes d'IDC et d'état

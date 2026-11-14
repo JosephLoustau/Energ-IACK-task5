@@ -5,6 +5,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/).
 ## [Non publié]
 
 ### Ajouté
+- Rapport HTML : boutons « Export PDF » (impression A4 / enregistrement PDF du navigateur) et « Export CSV » accessibles dans la barre supérieure ; téléchargement HTML conservé et barre adaptée aux petites fenêtres.
 - Plus-value immobilière de la rénovation (`src/renovation.ts`, `valueUpliftFactor`, `VALUE_UPLIFT`) : méthode de la valeur intrinsèque (Realwert), dépréciation par l'âge = 1 − état [Schätzer-Handbuch TG, § 3.2]. Plus-value = valeur à neuf des éléments remplacés × (1 − indice d'état de l'année des travaux) ; valeur à neuf des éléments remplacés = part du coût des mesures préservant la valeur, 0,55 pour l'enveloppe et 0,71 pour le chauffage (moyennes de 20 rénovations par CFC, rapport OFEN/OFL 2019), 0 pour le photovoltaïque, annualisée à 3 % sur 30 ans et tracée sous l'axe du graphique « Coûts annuels » comme recette (déduite du coût net). Montant et facteur affichés sous le graphique ; aide « Plus-value immobilière ». Légende du graphique « Coûts annuels » sans signes. Appliquée au prorata du coût du paquet complet retenu, annualisée à 3 % sur 30 ans et tracée sous l'axe du graphique « Coûts annuels » comme recette (déduite du coût net). Montant, facteur et base affichés sous le graphique ; aide « Plus-value immobilière ».
 
 ### Corrigé

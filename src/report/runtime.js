@@ -292,7 +292,7 @@
       <div class="control"><span>Thermostat</span>${help('Qu’est-ce que le levier thermostat ?', T('helpThermostatTitle'), T('helpThermostat', { saving: nf(M.savingPerDegree * 100), year: M.baseYear }))}${seg(M.comfortLevels.map((c) => [c, c === '0' ? '0' : `−${c}`]), 'comfort', state.comfort)}<small>°C</small></div>
       <div class="control"><span>Budget</span>${seg(M.budgets.map((b) => [b.key, b.key === 'none' ? '∞' : nf(Number(b.key) / 1e6)]), 'budget', state.budget)}<small>MCHF/an</small></div>
       <div class="control"><span>CSC</span>${help('Qu’est-ce que le coût social du carbone ?', T('helpSccTitle'), T('helpScc', { year: M.baseYear, horizon: M.horizonYear, defaultScc: M.defaultScc }))}<input type="number" id="scc" min="0" step="1" value="${state.scc}" aria-label="Coût social du carbone en CHF par tonne"><small>CHF/tCO₂</small></div>
-      <div class="actions-right">${edits ? `<button class="btn ghost" data-action="reset-texts" title="Revenir aux textes générés">Rétablir (${edits})</button>` : ''}<button class="btn ghost" data-action="edit" aria-pressed="${state.editing}">${state.editing ? '✓ Terminer' : '✎ Modifier le texte'}</button><button class="btn primary" data-action="html">Télécharger</button></div>
+      <div class="actions-right">${edits ? `<button class="btn ghost" data-action="reset-texts" title="Revenir aux textes générés">Rétablir (${edits})</button>` : ''}<button class="btn ghost" data-action="edit" aria-pressed="${state.editing}">${state.editing ? '✓ Terminer' : '✎ Modifier le texte'}</button><button class="btn" data-action="pdf" title="Ouvrir l’impression puis choisir Enregistrer au format PDF">Export PDF</button><button class="btn" data-action="csv">Export CSV</button><button class="btn primary" data-action="html">Télécharger HTML</button></div>
     </div></nav>`;
   }
 
@@ -340,6 +340,7 @@
     if (t.dataset.comfort) { state.comfort = t.dataset.comfort; render(); }
     else if (t.dataset.budget) { state.budget = t.dataset.budget; render(); }
     else if (t.dataset.action === 'csv') exportCsv();
+    else if (t.dataset.action === 'pdf') window.print();
     else if (t.dataset.action === 'list') { state.showList = !state.showList; render(); }
     else if (t.dataset.action === 'edit') { state.editing = !state.editing; render(); }
     else if (t.dataset.action === 'reset-texts' && confirm('Revenir aux textes générés ? Vos modifications seront perdues.')) { state.texts = {}; render(); }
@@ -374,7 +375,7 @@
   // Keep help popovers inside the viewport.
   root.addEventListener('toggle', (e) => {
     const panel = e.target.open && e.target.querySelector('.help-panel'); if (!panel) return;
-    // Fixed panel (the toolbar scrolls horizontally): anchor it under its "?" and keep it on screen.
+    // Anchor the fixed panel under its "?" and keep it on screen.
     const r = e.target.querySelector('summary').getBoundingClientRect();
     panel.style.top = `${r.bottom}px`;
     panel.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 8 - panel.offsetWidth))}px`;

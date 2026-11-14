@@ -127,7 +127,7 @@ export class HtmlReport {
 </html>`;
   }
 
-  /** Opens the report in a new tab; the report itself offers HTML and CSV downloads. */
+  /** Opens the report with HTML/CSV downloads and PDF export through the print dialog. */
   async open() {
     // Tab opened before any await, so popup blockers still see a user click.
     const tab = window.open('', '_blank');
