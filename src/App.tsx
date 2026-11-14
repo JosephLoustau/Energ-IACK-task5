@@ -6,8 +6,10 @@ import {
   ChartScatter, Map as MapIcon, Wrench, PlayCircle, ShieldCheck, SlidersHorizontal, Sparkles, Trash2, TrendingUp, Wallet, X,
 } from 'lucide-react';
 import Blason from './Blason';
+import Hint from './Hint';
+import { DATA_SOURCES, GLOSSARY, LITERATURE } from './references';
 import RenovationTab from './RenovationTab';
-import { CARRIERS, CO2_LEVY, DEFAULT_WINDOW_SHARE, ELECTRICITY_PRICE_FACTOR, DISCOUNT_RATE, ENERGY_PRICE_ROWS, ELEMENT_RATIO, EMBODIED, ELECTRICITY_EMISSION, HEAT_PUMP_COP, PV, REALIZED_SHARE, RENT, SOCIAL_CARBON_COST, WINDOW_SHARE } from './renovation';
+import { CARRIERS, CO2_LEVY, DEFAULT_WINDOW_SHARE, ELECTRICITY_PRICE_FACTOR, DISCOUNT_RATE, ENERGY_PRICE_ROWS, ELEMENT_RATIO, EMBODIED, ELECTRICITY_EMISSION, HEAT_PUMP_COP, PV, REALIZED_SHARE, RENT, VALUE_UPLIFT, SOCIAL_CARBON_COST, WINDOW_SHARE } from './renovation';
 import BuildingMap from './BuildingMap';
 import ScatterPlot from './ScatterPlot';
 import Tour from './Tour';
@@ -39,7 +41,7 @@ export function ThresholdControls({ value, editable, onChange }: {
   ] as const;
   return <div className="threshold-controls">
     {fields.map(({ key, title, unit, min, max, step, sign, description, icon: Icon }) => <div className="threshold" key={key}>
-      <div className="threshold-title"><Icon size={17} /><label htmlFor={`threshold-${key}`}>{title}</label></div>
+      <div className="threshold-title"><Icon size={17} /><label htmlFor={`threshold-${key}`}>{title}</label><Hint label={`À propos : ${title}`}>{description}</Hint></div>
       <div className="threshold-value"><strong>{sign} {number(value[key], key === 'condition' ? 2 : 0)}</strong><span>{unit}</span></div>
       <div className={`range-control ${editable ? 'with-references' : ''}`}>
         <input id={`threshold-${key}`} type="range" min={min} max={max} step={step} disabled={!editable}
@@ -60,7 +62,6 @@ export function ThresholdControls({ value, editable, onChange }: {
           <span>{number(PRESETS[id].thresholds[key], key === 'condition' ? 2 : 0)} <small>{unit}</small></span>
         </span>)}
       </div>}
-      <small>{description}</small>
     </div>)}
   </div>;
 }
@@ -93,8 +94,7 @@ function FutureThresholds({ strategy, onChange }: { strategy: Strategy; onChange
     setExpanded(false);
   }
   return <div className="future-thresholds">
-    <div className="section-label"><CalendarDays size={15} /> Évolution des seuils</div>
-    <p>Sans calendrier chargé, les seuils restent constants. Les changements ajoutés ici sont des simulations, pas des obligations légales. Années possibles : {BASE_YEAR + 1} à {TARGET_YEAR}. Les couleurs et le programme du tableau de bord couvrent {BASE_YEAR}–{DASHBOARD_LAST_YEAR} ; un changement après {DASHBOARD_LAST_YEAR} laisse le bâtiment en gris, avec son année de premier dépassement sur la fiche, et entre dans la feuille de route du rapport HTML (jusqu’en {TARGET_YEAR}).</p>
+    <div className="section-label"><CalendarDays size={15} /> Évolution des seuils <Hint label="À propos de l’évolution des seuils">Sans calendrier chargé, les seuils restent constants. Les changements ajoutés ici sont des simulations, pas des obligations légales. Années possibles : {BASE_YEAR + 1} à {TARGET_YEAR}. Les couleurs et le programme du tableau de bord couvrent {BASE_YEAR}–{DASHBOARD_LAST_YEAR} ; un changement après {DASHBOARD_LAST_YEAR} laisse le bâtiment en gris, avec son année de premier dépassement sur la fiche, et entre dans la feuille de route du rapport HTML (jusqu’en {TARGET_YEAR}).</Hint></div>
     {strategy.changes.map((change) => <div className="future-row" key={change.year}>
       <div><strong>Dès {change.year}</strong><span>IDC &gt; {change.thresholds.idc} · état &lt; {number(change.thresholds.condition, 2)} · CO₂ &gt; {change.thresholds.carbon}</span></div>
       <button className="icon-button" aria-label={`Supprimer les seuils de ${change.year}`} onClick={() => onChange({ ...strategy, changes: strategy.changes.filter((item) => item.year !== change.year) })}><Trash2 size={15} /></button>
@@ -134,10 +134,10 @@ function BuildingDetail({ assessment, strategy, onClose }: { assessment: Assessm
       <div><span>Indice d’état</span><strong>{number(renovation?.conditionBefore ?? building.condition, 2)}{renovation && <><ArrowRight size={13} />{number(renovation.conditionAfter, 2)}</>}</strong></div>
     </div>
     {renovation && <><div className="detail-investment"><span>Investissement estimé<strong>{money(renovation.cost)} CHF</strong></span><span>CO₂ évité chaque année<strong>{number(renovation.carbonSaved, 1)} tCO₂e</strong></span><span>Carbone gris des travaux<strong>{number(renovation.embodiedCarbon, 1)} tCO₂e</strong></span></div>
-      <p className="detail-note" data-testid="depth-note">{describeDepth(renovation, dueYear!)} Paquet : {renovation.depth === 'complete' ? 'isolation (façade, toit, cave), fenêtres' : 'isolation du toit et de la cave'} et, si le chauffage est fossile, raccordement au CAD (obligatoire s’il est dans la rue) ou PAC air/eau, photovoltaïque si possible — détail dans l’onglet « Mesures de rénovation ». Faisabilité non étudiée ; hors subventions.</p>
+      <p className="detail-note" data-testid="depth-note">{describeDepth(renovation, dueYear!)} <Hint label="Contenu du paquet">Paquet : {renovation.depth === 'complete' ? 'isolation (façade, toit, cave), fenêtres' : 'isolation du toit et de la cave'} et, si le chauffage est fossile, raccordement au CAD (obligatoire s’il est dans la rue) ou PAC air/eau, photovoltaïque si possible — détail dans l’onglet « Mesures de rénovation ». Faisabilité non étudiée ; hors subventions.</Hint></p>
       {renovation.residual && <p className="residual-warning">Après travaux, un seuil reste dépassé d’ici {DASHBOARD_LAST_YEAR} ({describeBreach(renovation.residual)}). Une étude complémentaire est nécessaire.</p>}
     </>}
-    <small className="fiction-note">Sources : SITG, QuantHome. Indice d’état modélisé (âge depuis construction ou derniers travaux), pas un diagnostic Stratus.{building.imputed && building.imputed.length > 0 && ` Valeurs estimées par défaut faute de donnée : ${building.imputed.map((key) => ({ idc: 'IDC', carbon: 'CO₂', year: 'année de construction' } as Record<string, string>)[key] ?? key).join(', ')}.`}{building.protection && building.protection !== 'none' && ' Bâtiment protégé : contraintes de rénovation de l’enveloppe probables.'}</small>
+    <p className="fiction-note">Sources et limites <Hint label="Sources et limites de la fiche">Sources : SITG, QuantHome. Indice d’état modélisé (âge depuis construction ou derniers travaux), pas un diagnostic Stratus.{building.imputed && building.imputed.length > 0 && ` Valeurs estimées par défaut faute de donnée : ${building.imputed.map((key) => ({ idc: 'IDC', carbon: 'CO₂', year: 'année de construction' } as Record<string, string>)[key] ?? key).join(', ')}.`}{building.protection && building.protection !== 'none' && ' Bâtiment protégé : contraintes de rénovation de l’enveloppe probables.'}</Hint></p>
   </section>;
 }
 
@@ -155,22 +155,20 @@ function Legend({ counts, cohort, onCohort, useCounts, uses, onToggleUse, onClea
     <button className="legend-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>Légende & filtres <ChevronRight size={14} /></button>
     <button className="legend-reset" onClick={onResetFilters} title="Effacer l’échéance, les affectations et la recherche"><RotateCcw size={13} /> Réinitialiser les filtres</button>
     {open && <>
-      <h4>Échéance <small>cliquer pour isoler</small></h4>
+      <h4>Échéance <Hint label="Lecture des couleurs"><span className="hint-par">Cliquer sur une catégorie pour l’isoler.</span><span className="hint-par">Couleur = année du premier seuil dépassé, avec les seuils en vigueur cette année-là. Les trois teintes = 1, 2 ou 3 critères dépassés cette année-là (IDC, CO₂, vétusté).</span><span className="hint-par">Rouge, jaune et vert : pleine opacité. Au-delà de 10 ans : gris à 30 %. Gris = aucun seuil dépassé d’ici {DASHBOARD_LAST_YEAR}, sans travaux simulés ; un dépassement plus tardif (jusqu’en {TARGET_YEAR}) est indiqué sur la fiche. L’horizon des KPI ne masque aucun point. « Sous 10 ans » couvre les besoins entre 5 et 10 ans.</span></Hint></h4>
       <div className="legend-list">
         {cohortOrder.map((key) => <button key={key} data-cohort={key} aria-pressed={cohort === key} className={cohort === key ? 'active' : ''} onClick={() => onCohort(cohort === key ? null : key)}>
           <span className="swatches">{[...new Set(SHADES[key])].map((color) => <i key={color} style={{ background: color, opacity: COHORTS[key].opacity }} />)}</span>
           <span>{COHORTS[key].short}</span><strong>{counts[key]}</strong>
         </button>)}
       </div>
-      <p className="legend-hint">Couleur = année du premier seuil dépassé, avec les seuils en vigueur cette année-là. Les trois teintes = 1, 2 ou 3 critères dépassés cette année-là (IDC, CO₂, vétusté).</p>
-      <p className="legend-hint">Rouge, jaune et vert : pleine opacité. Au-delà de 10 ans : gris à 30 %. Gris = aucun seuil dépassé d’ici {DASHBOARD_LAST_YEAR}, sans travaux simulés ; un dépassement plus tardif (jusqu’en {TARGET_YEAR}) est indiqué sur la fiche. L’horizon des KPI ne masque aucun point. « Sous 10 ans » couvre les besoins entre 5 et 10 ans.</p>
       <h4>Affectation <small>{uses.size ? `${uses.size} sélectionnée(s)` : 'toutes'}</small>{uses.size > 0 && <button className="text-button" onClick={onClearUses}>Tout afficher</button>}</h4>
       <div className="legend-list">
         {BUILDING_USES.map((use) => <button key={use} aria-pressed={uses.has(use)} className={`use-filter ${uses.has(use) ? 'active' : ''}`} onClick={() => onToggleUse(use)}>
           <ShapeIcon use={use} color="#347bc1" /><span>{use}</span><strong>{useCounts[use] ?? 0}</strong>
         </button>)}
       </div>
-      <h4>Taille <small>surface de référence énergétique</small></h4>
+      <h4>Taille <Hint label="Taille des symboles">Surface de référence énergétique (SRE) ; taille du symbole proportionnelle à √SRE.</Hint></h4>
       <div className="size-legend">{[200, 2000, 10000, 25000].map((sre) => <span key={sre}><svg width="40" height="40" viewBox="-20 -20 40 40" aria-hidden="true"><circle r={11 * symbolScale(sre)} fill="#347bc1" stroke="#111" strokeWidth="1.3" /></svg>{number(sre)} m²</span>)}</div>
     </>}
   </aside>;
@@ -240,7 +238,7 @@ export default function App() {
 
   return <div className="app-shell" data-strategy={strategyId}>
     <header className="topbar">
-      <a className="brand" href="#main" aria-label="StratoRéno — tableau de bord"><Blason /><span>Strato<span className="brand-emphasis">Réno</span><small>STRATÉGIE DE RÉNOVATION</small></span></a>
+      <a className="brand" href="#main" aria-label="DeCathlon Genève — tableau de bord"><Blason /><img className="app-logo" src="/decathlon-geneve-logo.svg" width="140" height="66" alt="DeCathlon Genève" /><span className="brand-slogan">10 ans pour renforcer<br />le parc bâti</span></a>
       <div className="topbar-right">
         <span className="topbar-count"><strong>{BUILDINGS.length}</strong> bâtiments de la Ville</span>
         <button className="help-button" onClick={() => setTourOpen(true)}><PlayCircle size={16} /> Visite guidée</button>
@@ -265,10 +263,21 @@ export default function App() {
           <div><h3>Carbone et électricité</h3><p>Coût social du carbone : <strong>{SOCIAL_CARBON_COST} CHF/tCO₂e</strong>, appliqué aux émissions annuelles. Facteur d’émission de l’électricité du réseau : <strong>{number(ELECTRICITY_EMISSION, 3)} kgCO₂e/kWh</strong> ; CAD : <strong>{number(CARRIERS['CAD']!.emission, 3)} kgCO₂e/kWh</strong> (valeurs fixées par l’équipe projet). CO₂ = scope 1 + 2, calculé pour chaque bâtiment à partir de l’IDC, du système de chauffage et du facteur d’émission de son agent : combustion directe pour le gaz et le mazout, facteur du réseau pour l’électricité et le CAD (chauffage inconnu : traité comme du gaz). Le champ scope 1 de QuantHome n’est plus utilisé : ses facteurs étaient incohérents (p. ex. 120 bâtiments au gaz avec le facteur du mazout).</p></div>
           <div><h3>Carbone gris des travaux</h3><p>Fabrication et élimination des matériaux et équipements (KBOB 2022) : isolant EPS dimensionné par ΔU, fenêtres à cadre bois-métal et triple vitrage, PAC, raccordement CAD (proxy) et photovoltaïque. Amorti sur la durée de vie de chaque mesure et comparé à la valeur limite de {EMBODIED.legalLimitPerM2Year} kgCO₂e/m²·an des rénovations importantes dès 2034 (RECMC). Indiqué à part : non déduit du CO₂ évité ni du coût social du carbone.</p></div>
           <div><h3>Photovoltaïque</h3><p>{number(PV.costPerKwc)} CHF/kWc, productible {number(PV.yield)} kWh/kWc·an, {PV.lifetime} ans, entretien {number(PV.maintenance * 100)} ct/kWh (SWISSOLAR2024). Puissance limitée par la toiture ({number(PV.kwcPerM2, 1)} kWc/m² × part de toiture ensoleillée OCEN) et par la consommation électrique de chauffage. Non installable sur les bâtiments protégés (classés ou à l’inventaire).</p></div>
-          <div><h3>Loyers</h3><p>Manque à gagner : {RENT.lossYears} an de loyers résidentiels non perçus pendant les travaux, réparti sur {RENT.spreadYears} ans. Hausse de loyer liée au confort : +{percent(RENT.comfortUplift)} des loyers (hypothèse modèle, non sourcée). Composantes du graphique des coûts annuels : le manque à gagner est tracé sous l’axe, la hausse de loyer au-dessus.</p></div>
+          <div><h3>Loyers</h3><p>Manque à gagner : {RENT.lossYears} an de loyers résidentiels non perçus pendant les travaux, réparti sur {RENT.spreadYears} ans. Hausse de loyer liée au confort : +{percent(RENT.comfortUplift)} des loyers (hypothèse modèle, non sourcée). Composantes du graphique des coûts annuels : le manque à gagner est un coût tracé au-dessus de l’axe, la hausse de loyer une recette tracée en dessous ; le total affiché est le coût net (coûts + manque à gagner − hausse de loyer − plus-value annualisée).</p></div>
+          <div><h3>Plus-value immobilière</h3><p>Méthode de la valeur intrinsèque (Realwert) : un élément de construction perd de sa valeur à neuf avec l’âge (dépréciation = 1 − état, Schätzer-Handbuch du canton de Thurgovie) et la retrouve lorsqu’il est renouvelé. Plus-value = valeur à neuf des éléments remplacés × (1 − indice d’état de l’année des travaux) : 0 pour un bâtiment neuf, 60 % pour un état de 0,4, d’autant plus grande que le bâtiment est vétuste. Valeur à neuf des éléments remplacés = part du coût des mesures qui préserve la valeur (remplacement à l’identique) : {percent(VALUE_UPLIFT.preservingShare.enveloppe)} pour l’enveloppe et {percent(VALUE_UPLIFT.preservingShare.equipement)} pour le chauffage (moyennes de 20 rénovations, rapport OFEN/OFL 2019), 0 pour le photovoltaïque (élément nouveau). L’autre part, qui crée des plus-values au sens du droit du bail (art. 14 OBLF), est reportée sur les loyers et déjà valorisée par la hausse de loyer et les économies d’énergie. Annualisée à {percent(DISCOUNT_RATE)} sur {VALUE_UPLIFT.years} ans et tracée sous l’axe du graphique des coûts annuels, comme une recette.</p></div>
           <div><h3>Lecture de la carte</h3><p>Taille du symbole ∝ √SRE, forme = affectation, couleur = échéance (rouge : immédiat, jaune : sous 5 ans, vert : sous 10 ans, gris à 30 % : surveillance au-delà de 10 ans), teinte plus foncée = plus de critères dépassés l’année d’échéance. Gris : aucun seuil dépassé d’ici {DASHBOARD_LAST_YEAR} ; l’infobulle et la fiche donnent l’année d’un éventuel premier dépassement jusqu’en {TARGET_YEAR}, sans date de rénovation au tableau de bord.</p></div>
         </div>
-        <p className="assumption-footer">L’investissement et le CO₂ évitable portent sur les travaux sélectionnés ; les moyennes d’IDC et d’état sont pondérées par SRE sur tout le parc, y compris les bâtiments sans travaux. Avant : parc au 1er janvier {BASE_YEAR}. Après : mêmes bâtiments, en appliquant seulement les travaux sélectionnés. Les gains sont le potentiel annuel des travaux achevés, pas un cumul des émissions évitées. La faisabilité technique, le patrimoine protégé et les contraintes de réseau ne sont pas modélisés. La maquette ne démontre pas la sortie complète des fossiles.</p>
+        <h3 className="assumptions-section">Lexique</h3>
+        <table className="ref-table glossary"><tbody>{GLOSSARY.map(({ term, definition }) => <tr key={term}><th scope="row">{term}</th><td>{definition}</td></tr>)}</tbody></table>
+        <h3 className="assumptions-section">Sources</h3>
+        <table className="ref-table sources"><thead><tr><th>Source</th><th>Référence</th><th>Usage</th></tr></thead><tbody>
+          <tr className="ref-group"><td colSpan={3}>Données</td></tr>
+          {DATA_SOURCES.map((s) => <tr key={s.id}><th scope="row">{s.url ? <a href={s.url} target="_blank" rel="noreferrer">{s.id}</a> : s.id}</th><td>{s.author}, {s.title}</td><td>{s.use}</td></tr>)}
+          <tr className="ref-group"><td colSpan={3}>Références</td></tr>
+          {LITERATURE.map((s) => <tr key={s.id}><th scope="row">{s.url ? <a href={s.url} target="_blank" rel="noreferrer">{s.id}</a> : s.id}</th><td>{s.author} ({s.year}), {s.title}</td><td>{s.use}</td></tr>)}
+        </tbody></table>
+        <p className="sources-more">Liste complète : docs/renovation/sources.csv.</p>
+        <p className="assumption-footer">Les KPI sont le potentiel annuel des travaux achevés, pas un cumul des émissions évitées. La faisabilité technique, le patrimoine protégé et les contraintes de réseau ne sont pas modélisés. La maquette ne démontre pas la sortie complète des fossiles.</p>
       </section>
     </div>}
 
@@ -294,7 +303,7 @@ export default function App() {
             <ThresholdControls value={strategy.thresholds} editable={strategyId === 'custom'} onChange={(thresholds) => setCustom({ ...custom, thresholds })} />
             {strategyId !== 'custom' && <button className="text-button customize-link" onClick={() => { resetCustom(strategyId); setStrategyId('custom'); }}>Personnaliser cette stratégie <ArrowRight size={14} /></button>}
           </div>
-          {strategyId === 'custom' ? <FutureThresholds key={customBase} strategy={custom} onChange={setCustom} /> : <div className="calendar-note"><CalendarDays size={17} /><p><strong>Calendrier des seuils</strong>{strategy.changes.length === 0 ? 'Seuils constants.' : strategy.changes.map((change) => <span key={change.year}>Dès {change.year} : IDC &gt; {change.thresholds.idc} · état &lt; {number(change.thresholds.condition, 2)} · CO₂ &gt; {change.thresholds.carbon}<br /></span>)}{strategyId === 'conservative' ? 'Art. 14 REn (travaux ordonnés), rien de programmé après 2031 ; pas de limite légale de CO₂ : équivalent mazout du seuil IDC.' : `Plan directeur de l’énergie 2020-2030, fiches 2.1 et 2.2 (CO₂ : équivalent gaz de 450 puis 230 MJ/m²·an) ; ${TARGET_YEAR} : zéro net (LCl, Stratégie climat de la Ville), IDC 230 et résidu de 1 kg CO₂, non atteint par un raccordement au CAD à facteur constant ; 2040 interpolé. Couleurs et programme du tableau de bord : ${BASE_YEAR}–${DASHBOARD_LAST_YEAR} (premier dépassement plus tardif indiqué sur la fiche des bâtiments gris) ; feuille de route du rapport jusqu’en ${TARGET_YEAR}.`}</p></div>}
+          {strategyId === 'custom' ? <FutureThresholds key={customBase} strategy={custom} onChange={setCustom} /> : <div className="calendar-note"><CalendarDays size={17} /><p><strong>Calendrier des seuils <Hint label="Base des seuils">{strategyId === 'conservative' ? 'Art. 14 REn (travaux ordonnés), rien de programmé après 2031 ; pas de limite légale de CO₂ : équivalent mazout du seuil IDC.' : `Plan directeur de l’énergie 2020-2030, fiches 2.1 et 2.2 (CO₂ : équivalent gaz de 450 puis 230 MJ/m²·an) ; ${TARGET_YEAR} : zéro net (LCl, Stratégie climat de la Ville), IDC 230 et résidu de 1 kg CO₂, non atteint par un raccordement au CAD à facteur constant ; 2040 interpolé. Couleurs et programme du tableau de bord : ${BASE_YEAR}–${DASHBOARD_LAST_YEAR} (premier dépassement plus tardif indiqué sur la fiche des bâtiments gris) ; feuille de route du rapport jusqu’en ${TARGET_YEAR}.`}</Hint></strong>{strategy.changes.length === 0 ? 'Seuils constants.' : strategy.changes.map((change) => <span key={change.year}>Dès {change.year} : IDC &gt; {change.thresholds.idc} · état &lt; {number(change.thresholds.condition, 2)} · CO₂ &gt; {change.thresholds.carbon}<br /></span>)}</p></div>}
           <div className="priority-note"><span className="live-dot" /><p>Un critère suffit à déclencher. <strong>Priorité IDC → état → CO₂</strong></p></div>
         </aside>
 
@@ -357,7 +366,7 @@ export default function App() {
         </div>
       </div>
     </main>
-    <footer className="site-footer"><span>StratoRéno <span>·</span> Défi 5 — Sortir des énergies fossiles</span><span>Données SITG / QuantHome · fond de carte swisstopo</span></footer>
+    <footer className="site-footer"><span>DeCathlon Genève <span>·</span> Défi 5 — Sortir des énergies fossiles</span><span>Données SITG / QuantHome · fond de carte swisstopo</span></footer>
     <Tour open={tourOpen} onClose={() => setTourOpen(false)} onEnter={onTourEnter} />
   </div>;
 }

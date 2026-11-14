@@ -127,6 +127,21 @@ export const PV = {
 };
 /** Loyers : 1 année de loyers perdue pendant les travaux, répartie sur 30 ans ; hausse de loyer pour le confort (hypothèse modèle). */
 export const RENT = { lossYears: 1, spreadYears: 30, comfortUplift: 0.10 };
+/**
+ * Plus-value immobilière : valeur intrinsèque (Realwert/Sachwert) regagnée par la rénovation. Le Neuwert d'un élément
+ * est déprécié par l'âge (Altersentwertung = 1 − état de l'élément [SHB_TG2025, § 3.2 et glossaire]) ; renouvelé, il
+ * retrouve son Neuwert. Plus-value = Neuwert des éléments remplacés × (1 − indice d'état de l'année des travaux).
+ * Neuwert des éléments remplacés = part « préservant la valeur » du coût des mesures (remplacement à l'identique),
+ * moyennes de 20 rénovations importantes réparties par CFC [OFEN_OFL2019, § 4.5] : part créant des plus-values 47 %
+ * (CFC 21) et 44 % (CFC 22) pour l'enveloppe, d'où 0,55 préservant la valeur ; 29 % (CFC 24, CVC) pour le chauffage,
+ * d'où 0,71. Le photovoltaïque est un élément nouveau, sans élément usé à remplacer : 0 (hypothèse modèle).
+ * La part créant des plus-values (amélioration au-delà du standard d'origine) n'est pas comptée ici : c'est elle que le
+ * droit du bail reporte sur les loyers (art. 14 OBLF), et le modèle la valorise déjà par la hausse de loyer et les
+ * économies d'énergie. Annualisée à DISCOUNT_RATE sur `years` ans.
+ */
+export const VALUE_UPLIFT = { years: 30, preservingShare: { enveloppe: 0.55, equipement: 0.71, pv: 0 } };
+/** Facteur de plus-value = dépréciation regagnée (1 − indice d'état), borné à [0, 1]. */
+export const valueUpliftFactor = (condition: number) => Math.min(1, Math.max(0, 1 - condition));
 const ELECTRIC_HEATING = new Set(['Pompe à chaleur', 'Électrique']);
 
 interface EnvelopeSpec {
@@ -237,11 +252,13 @@ export interface Side {
   envelopeCost: number;
   equipmentCost: number;
   renovationCost: number;
-  /** Énergie + rénovation + carbone (hors loyers). */
+  /** Énergie + rénovation + carbone (hors loyers et plus-value). */
   total: number;
   /** Loyers : manque à gagner annualisé (≥ 0) et hausse de loyer annuelle (≥ 0). */
   rentLoss: number;
   rentGain: number;
+  /** Plus-value immobilière annualisée (≥ 0). */
+  valueGain: number;
 }
 
 export interface RenovationPlan {
@@ -258,14 +275,16 @@ export interface RenovationPlan {
   /** Carbone gris des mesures retenues : total (kgCO₂e), amorti sur la durée de vie de chaque mesure (kgCO₂e/an et kgCO₂e/m² SRE·an). */
   embodied: { total: number; annual: number; perM2Year: number };
   rent: { base: number; loss: number; gain: number; net: number };
+  /** Plus-value immobilière : état de l'année des travaux, facteur (1 − état), Neuwert des éléments remplacés, plus-value (CHF) et annualisée (CHF/an). */
+  value: { condition: number; factor: number; replaced: number; gain: number; annual: number };
 }
 
 interface SideInput {
   finalKwhPerM2: number; carbon: number; heating: string;
-  envelopeCost?: number; equipmentCost?: number; pvKwh?: number; rentLoss?: number; rentGain?: number;
+  envelopeCost?: number; equipmentCost?: number; pvKwh?: number; rentLoss?: number; rentGain?: number; valueGain?: number;
 }
 function sideCosts(building: Building, input: SideInput): Side {
-  const { finalKwhPerM2, carbon, heating, envelopeCost = 0, equipmentCost = 0, pvKwh = 0, rentLoss = 0, rentGain = 0 } = input;
+  const { finalKwhPerM2, carbon, heating, envelopeCost = 0, equipmentCost = 0, pvKwh = 0, rentLoss = 0, rentGain = 0, valueGain = 0 } = input;
   const finalKwh = finalKwhPerM2 * building.area;
   const price = energyPrice(heating);
   // L'électricité photovoltaïque autoconsommée remplace des imports (prix du réseau) moyennant l'entretien.
@@ -274,7 +293,7 @@ function sideCosts(building: Building, input: SideInput): Side {
   const renovationCost = envelopeCost + equipmentCost;
   return {
     idc: finalKwhPerM2 * carrierOf(heating).idcMjPerKwh, carbon, finalKwh, energyCost, carbonCost, envelopeCost, equipmentCost, renovationCost,
-    total: energyCost + carbonCost + renovationCost, rentLoss, rentGain,
+    total: energyCost + carbonCost + renovationCost, rentLoss, rentGain, valueGain,
   };
 }
 
@@ -285,7 +304,7 @@ export const MEASURE_IDS = ['facade', 'toit', 'cave', 'fenetres', 'pac', 'cad', 
  * `measures` liste toutes les mesures possibles avec leur drapeau `included`, et les coûts, économies,
  * émissions et loyers ne tiennent compte que des mesures incluses.
  */
-export function planRenovation(building: Building, selection?: ReadonlySet<string>): RenovationPlan {
+export function planRenovation(building: Building, selection?: ReadonlySet<string>, condition = building.condition): RenovationPlan {
   const isOn = (id: string) => !selection || selection.has(id);
   const area = building.area;
   const finalBefore = building.idc / carrierOf(building.heating).idcMjPerKwh;
@@ -398,14 +417,21 @@ export function planRenovation(building: Building, selection?: ReadonlySet<strin
   const worksInside = included.some((m) => m.category === 'enveloppe');
   const loss = worksInside ? base * RENT.lossYears / RENT.spreadYears : 0;
   const gain = worksInside ? base * RENT.comfortUplift : 0;
+
+  // Plus-value : dépréciation regagnée sur le Neuwert des éléments remplacés (part préservant la valeur du coût des mesures).
+  const factor = valueUpliftFactor(condition);
+  const replaced = included.reduce((sum, m) => sum + m.cost * (m.id === 'pv' ? VALUE_UPLIFT.preservingShare.pv : VALUE_UPLIFT.preservingShare[m.category]), 0);
+  const valueGain = replaced * factor;
+  const valueAnnual = valueGain * annuity(VALUE_UPLIFT.years);
   return {
     measures, capex, heatPump, districtHeating, powerKw,
     pv: { kwc: pvOn ? kwc : 0, production, blocked: protectedBuilding, reason },
     rent: { base, loss, gain, net: gain - loss }, embodied,
+    value: { condition, factor, replaced, gain: valueGain, annual: valueAnnual },
     before: sideCosts(building, { finalKwhPerM2: finalBefore, carbon: building.carbonIntensity, heating: building.heating }),
     after: sideCosts(building, {
       finalKwhPerM2: finalAfter, carbon: Math.min(carbonAfter, building.carbonIntensity), heating: heatingAfter,
-      envelopeCost: annual('enveloppe'), equipmentCost: annual('equipement'), pvKwh, rentLoss: loss, rentGain: gain,
+      envelopeCost: annual('enveloppe'), equipmentCost: annual('equipement'), pvKwh, rentLoss: loss, rentGain: gain, valueGain: valueAnnual,
     }),
   };
 }

@@ -4,6 +4,12 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/).
 
 ## [Non publié]
 
+### Ajouté
+- Plus-value immobilière de la rénovation (`src/renovation.ts`, `valueUpliftFactor`, `VALUE_UPLIFT`) : méthode de la valeur intrinsèque (Realwert), dépréciation par l'âge = 1 − état [Schätzer-Handbuch TG, § 3.2]. Plus-value = valeur à neuf des éléments remplacés × (1 − indice d'état de l'année des travaux) ; valeur à neuf des éléments remplacés = part du coût des mesures préservant la valeur, 0,55 pour l'enveloppe et 0,71 pour le chauffage (moyennes de 20 rénovations par CFC, rapport OFEN/OFL 2019), 0 pour le photovoltaïque, annualisée à 3 % sur 30 ans et tracée sous l'axe du graphique « Coûts annuels » comme recette (déduite du coût net). Montant et facteur affichés sous le graphique ; aide « Plus-value immobilière ». Légende du graphique « Coûts annuels » sans signes. Appliquée au prorata du coût du paquet complet retenu, annualisée à 3 % sur 30 ans et tracée sous l'axe du graphique « Coûts annuels » comme recette (déduite du coût net). Montant, facteur et base affichés sous le graphique ; aide « Plus-value immobilière ».
+
+### Corrigé
+- Graphique « Coûts annuels » (onglet « Mesures de rénovation » et `BuildingCharts`) : le manque à gagner de loyers est un coût, tracé au-dessus de l'axe ; la hausse de loyer est une recette, tracée en dessous. Le total affiché est le coût net (coûts + manque à gagner − hausse de loyer) ; auparavant la hausse de loyer était ajoutée aux coûts et le manque à gagner ignoré.
+
 ### Modifié
 - Visite guidée (`src/tourSteps.ts`, `src/Tour.tsx`) : la fenêtre d'explication se place à côté de l'élément mis en avant sans le recouvrir ; nouvelles étapes 8 « Mesures de rénovation » (concentrée sur un bâtiment, le premier de la feuille de route par défaut) et 9 « Exportez la stratégie » (rapport HTML interactif paramétrable).
 - Prix de l'énergie moyens 2022-2026 (`src/renovation.ts`) : taxe CO₂ (120 CHF/t) comprise dans le gaz et le mazout, électricité au tarif gros consommateur (75 % du tarif ménage ElCom), tous affichés dans les hypothèses.
