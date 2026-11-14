@@ -82,24 +82,38 @@ npm run preview
 
 ### Parcours de démonstration
 
-1. Explorer le programme immédiat du scénario **Base légale**.
-2. Passer à **Exemplaire** et comparer les KPI.
-3. Ouvrir **Modulable**, choisir une base et modifier les curseurs.
-   Les repères S1/S2 et leurs valeurs, affichés uniquement dans ce
-   scénario, comparent les deux références sans les modifier.
-4. Ajouter, par exemple, un seuil IDC de 450 en 2030 : **exemple de
-   simulation seulement**, pas calendrier légal confirmé.
-5. Comparer les programmes cumulés en 2027, 2032 et 2037, puis cliquer sur
-   une couleur pour isoler une catégorie.
-6. Cliquer sur un point ou une ligne pour lire les motifs, les coûts et les
-   gains supposés. Le bouton coloré **Exporter la stratégie**, sous les scénarios
-   et avant les curseurs, ouvre le rapport HTML pour l'ensemble du parc,
-   avec la stratégie active présélectionnée, indépendamment des filtres.
-   Dans la barre du rapport, **Export PDF** ouvre l'impression du navigateur :
-   choisir **Enregistrer au format PDF** pour sauvegarder les pages A4 avec
-   les paramètres et textes affichés. **Export CSV** télécharge les données des
-   bâtiments avec les paramètres actifs (et le filtre de recherche de la liste,
-   s'il est renseigné). **Télécharger HTML** conserve le rapport interactif.
+Le bouton jaune **Visite guidée** accompagne ce parcours en neuf étapes :
+
+1. **Choisissez un scénario** : découvrir **Base légale**, **Exemplaire** et
+   **Modulable**. Chaque scénario fixe les seuils qui déclenchent une rénovation.
+2. **Ajustez les curseurs** : explorer les seuils d'IDC, d'état et d'intensité
+   carbone. Un seul seuil dépassé suffit à rendre un bâtiment prioritaire.
+   Dans **Modulable**, les curseurs sont libres et les repères S1/S2 permettent
+   de comparer les valeurs de référence.
+3. **Lisez la carte** : la taille des symboles représente la surface énergétique
+   et leur forme indique l'affectation. Rouge : immédiat ; jaune : cinq ans ;
+   vert : dix ans ; gris à 30 % d'opacité : surveillance au-delà de dix ans.
+   Une teinte plus foncée indique davantage de critères dépassés.
+4. **Filtrez avec la légende** : sélectionner une échéance ou une affectation
+   pour isoler les bâtiments concernés.
+5. **Passez au diagramme** : croiser l'IDC en abscisse et l'intensité carbone
+   en ordonnée pour repérer les bâtiments hors seuils.
+6. **Mesurez l'impact** : lire l'investissement requis et le CO₂ évitable des
+   travaux sélectionnés. Les moyennes d'IDC et d'état sont pondérées par surface
+   sur tout le parc, y compris les bâtiments sans travaux. La couleur des KPI
+   suit le scénario : rouge pour **Base légale**, vert pour **Exemplaire**,
+   bleu pour **Modulable**.
+7. **Consultez la feuille de route** : parcourir les bâtiments classés par
+   échéance et critères. Les pictogrammes ouvrent le bâtiment sur la carte
+   ou dans ses mesures de rénovation.
+8. **Mesures de rénovation** : pour un bâtiment, cocher ou décocher les mesures
+   (isolation, fenêtres, pompe à chaleur, photovoltaïque) et observer le recalcul
+   du coût et du graphique des coûts annuels : énergie, investissement,
+   carbone et loyers.
+9. **Exportez la stratégie** : retrouver dans le rapport interactif la stratégie
+   de tout le parc, ses seuils, ses scénarios et ses hypothèses. Certains paramètres
+   de rénovation peuvent y être modifiés directement, sans retourner dans
+   l'application.
 
 Les filtres d'usage et de recherche s'appliquent à la carte, à la liste et
 aux travaux sélectionnés et à leurs coûts et gains. Les moyennes d'IDC et d'état
