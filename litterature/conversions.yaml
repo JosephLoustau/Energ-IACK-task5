@@ -1,0 +1,108 @@
+# Tables de conversion de l'étape 6 (normaliser.py).
+#
+# Règle : aucune valeur inventée. Les indices et taux de change sont à compléter depuis les sources officielles
+# indiquées ; tant qu'ils manquent, les montants restent nominaux (signalés « nominal » dans les sorties) ou, pour une
+# autre devise, sont écartés (« change_manquant »).
+
+# Année de référence des prix et traitement de la TVA après normalisation.
+annee_reference: 2024
+tva_reference: exclue
+
+# Unités : clé = unité canonique ; `alias` = écritures d'origine (comparées après mise en minuscules, suppression des
+# espaces, points, parenthèses et symboles ·⋅*, et normalisation Unicode : m² → m2, CO₂ → co2, € → eur).
+# `facteur` multiplie la valeur d'origine ; `devise` force la devise d'origine (sinon : champ de contexte devise).
+# Les unités rencontrées et absentes de cette table sont listées dans sorties/unites_inconnues.csv : les ajouter ici.
+unites:
+  CHF/m2:
+    - {alias: [chf/m2, fr/m2, sfr/m2, chf/m2element, chf/m2sre, chf/m2ebf, chf/m2ae, chf/m2fenetre, chf/m2toiture], facteur: 1}
+    - {alias: [eur/m2, euro/m2, eur/m2element], facteur: 1, devise: EUR}
+  CHF/(m2·cm):
+    - {alias: [chf/m2cm, chf/m2/cm, chf/cm/m2, chf/m2xcm], facteur: 1}
+  CHF:
+    - {alias: [chf, fr, sfr, chf/installation, chf/batiment, chf/logement], facteur: 1}
+    - {alias: [kchf, tchf, "1000chf", kfr], facteur: 1000}
+    - {alias: [miochf, mchf, millionschf], facteur: 1000000}
+    - {alias: [eur, euro], facteur: 1, devise: EUR}
+  CHF/kW:
+    - {alias: [chf/kw, chf/kwth], facteur: 1}
+    - {alias: [kchf/kw], facteur: 1000}
+    - {alias: [eur/kw], facteur: 1, devise: EUR}
+  CHF/kWc:
+    - {alias: [chf/kwc, chf/kwp, fr/kwp], facteur: 1}
+    - {alias: [eur/kwp, eur/kwc], facteur: 1, devise: EUR}
+  CHF/kWh:
+    - {alias: [chf/kwh, fr/kwh], facteur: 1}
+    - {alias: [rp/kwh, ct/kwh, cts/kwh, rappen/kwh, centimes/kwh], facteur: 0.01}
+    - {alias: [chf/mwh], facteur: 0.001}
+    - {alias: [eur/kwh], facteur: 1, devise: EUR}
+    - {alias: [eurct/kwh, ceur/kwh, eurocent/kwh], facteur: 0.01, devise: EUR}
+    - {alias: [eur/mwh], facteur: 0.001, devise: EUR}
+  CHF/tCO2e:
+    - {alias: [chf/tco2, chf/tco2e, chf/tco2eq], facteur: 1}
+    - {alias: [eur/tco2, eur/tco2e, eur/tco2eq], facteur: 1, devise: EUR}
+  W/(m2·K):
+    - {alias: [w/m2k, w/m2/k, wm-2k-1], facteur: 1}
+  W/(m·K):
+    - {alias: [w/mk, w/m/k, wm-1k-1], facteur: 1}
+  kWh/(m2·a):
+    - {alias: [kwh/m2a, kwh/m2/a, kwh/m2an, kwh/m2y, kwh/m2yr, kwh/m2/yr, kwh/m2/year, kwh/m2jahr, kwh/m2, kwh/m2sre, kwh/m2sre/a, kwh/m2ebf, kwh/m2ebfa], facteur: 1}
+    - {alias: [mj/m2a, mj/m2/a, mj/m2an, mj/m2y, mj/m2yr, mj/m2/yr, mj/m2/year, mj/m2/an, mj/m2, mj/m2sre, mj/m2sre/a, mj/m2ae, mj/m2ae/a], facteur: 0.277777778}
+  kWh/(kWc·a):
+    - {alias: [kwh/kwc, kwh/kwp, kwh/kwca, kwh/kwpa, kwh/kwp/a, kwh/kwp/yr, kwh/kwc/an], facteur: 1}
+  W/m2:
+    - {alias: [w/m2, w/m2sre, w/m2ebf], facteur: 1}
+  kWc/m2:
+    - {alias: [kwc/m2, kwp/m2], facteur: 1}
+    - {alias: [wp/m2, wc/m2], facteur: 0.001}
+  m2/m2:
+    - {alias: [m2/m2, m2/m2sre, m2/m2ebf, ath/ae], facteur: 1}
+  K·d/a:
+    - {alias: [kd, kd/a, k·d, hgt, dju, kd/an], facteur: 1}
+  a:
+    - {alias: [a, an, ans, annees, years, year, yr, jahre], facteur: 1}
+  kg/m3:
+    - {alias: [kg/m3], facteur: 1}
+  kgCO2e/kWh:
+    - {alias: [kgco2/kwh, kgco2e/kwh, kgco2eq/kwh, kgco2-eq/kwh], facteur: 1}
+    - {alias: [gco2/kwh, gco2e/kwh, gco2eq/kwh, gco2-eq/kwh, g/kwh], facteur: 0.001}
+  kgCO2e/kg:
+    - {alias: [kgco2/kg, kgco2e/kg, kgco2eq/kg], facteur: 1}
+  kgCO2e/m2:
+    - {alias: [kgco2/m2, kgco2e/m2, kgco2eq/m2], facteur: 1}
+  kgCO2e/kW:
+    - {alias: [kgco2/kw, kgco2e/kw, kgco2eq/kw], facteur: 1}
+  kgCO2e/kWc:
+    - {alias: [kgco2/kwp, kgco2e/kwp, kgco2eq/kwp, kgco2/kwc, kgco2e/kwc], facteur: 1}
+  "-":
+    - {alias: ["-", ratio, facteur, factor, cop, jaz, spf, scop], facteur: 1}
+    - {alias: ["%"], facteur: 0.01}
+
+# Taux de TVA (en part) par pays et période [AFC, taux normal]. Une valeur TTC est ramenée HT en divisant par (1 + taux).
+# Pays absents : TVA laissée telle quelle et signalée.
+tva:
+  CH:
+    - {de: 1995, a: 1998, taux: 0.065}
+    - {de: 1999, a: 2000, taux: 0.075}
+    - {de: 2001, a: 2010, taux: 0.076}
+    - {de: 2011, a: 2017, taux: 0.080}
+    - {de: 2018, a: 2023, taux: 0.077}
+    - {de: 2024, a: 2099, taux: 0.081}
+
+# Taux de change annuels moyens : CHF pour 1 unité de devise, par année [BNS, cours moyens annuels]. À COMPLÉTER.
+taux_change:
+  EUR: {}
+  USD: {}
+
+# Indices de prix par année (base quelconque, la même pour toutes les années d'une série). À COMPLÉTER.
+#   construction : OFS, indice suisse des prix de la construction (rénovation / transformation, bâtiment d'habitation)
+#   ipc          : OFS, indice suisse des prix à la consommation
+indices:
+  construction: {}
+  ipc: {}
+
+# Indice à appliquer par paramètre (défaut : construction).
+indice_par_parametre:
+  prix_energie: ipc
+  cout_entretien_pv: ipc
+  cout_social_carbone: ipc
+  facteur_prix_electricite_gros_consommateur: ipc
