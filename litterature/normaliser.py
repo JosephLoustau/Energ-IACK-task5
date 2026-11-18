@@ -12,7 +12,9 @@ Colonne `normalisation` :
   unite_inconnue       unité absente de conversions.yaml (voir sorties/unites_inconnues.csv) : écartée
   change_manquant      devise étrangère sans taux de change : écartée
   exclue / a_revoir    écartée par décision ou faute de contrôle
-Colonne `notes` : précisions (TVA inconnue, devise supposée CHF, etc.).
+Colonne `notes` : précisions (TVA inconnue, devise supposée CHF, unité de x inconnue, etc.).
+Points de série : l'abscisse x est convertie dans l'unité canonique de `unites_variable` (colonnes x_n, unite_x_n) ;
+une unité de x inconnue ne fait pas écarter la valeur (x_n vide, signalé dans `notes` et unites_inconnues.csv).
 
 Sortie : sorties/observations_normalisees.csv.
 """
@@ -40,17 +42,25 @@ def cle_unite(unite: str) -> str:
     return re.sub(r"[\s·⋅*().]", "", u)
 
 
-def charger_conversions() -> tuple[dict[str, Any], dict[str, tuple[str, float, str | None]]]:
-    conv = yaml.safe_load(FICHIER_CONVERSIONS.read_text(encoding="utf-8"))
-    table: dict[str, tuple[str, float, str | None]] = {}
-    for canonique, regles in conv["unites"].items():
+Table = dict[str, tuple[str, float, str | None]]
+
+
+def _table(unites: dict[str, Any]) -> Table:
+    table: Table = {}
+    for canonique, regles in unites.items():
         for regle in regles:
             for alias in regle["alias"]:
                 cle = cle_unite(str(alias))
                 if cle in table and table[cle][0] != canonique:
                     raise ValueError(f"alias « {alias} » attribué à deux unités : {table[cle][0]} et {canonique}")
                 table[cle] = (canonique, float(regle["facteur"]), regle.get("devise"))
-    return conv, table
+    return table
+
+
+def charger_conversions() -> tuple[dict[str, Any], Table, Table]:
+    """Configuration, table des unités des valeurs, table des unités de l'abscisse des séries."""
+    conv = yaml.safe_load(FICHIER_CONVERSIONS.read_text(encoding="utf-8"))
+    return conv, _table(conv["unites"]), _table(conv.get("unites_variable") or {})
 
 
 def lire_csv(chemin: Path) -> list[dict[str, str]]:
@@ -79,7 +89,27 @@ def taux_tva(conv: dict[str, Any], pays: str, an: int | None) -> float | None:
     return next((p["taux"] for p in conv["tva"][code] if p["de"] <= an <= p["a"]), None)
 
 
-def normaliser(obs: dict[str, str], conv: dict[str, Any], table: dict[str, tuple[str, float, str | None]]) -> dict[str, Any]:
+def normaliser_x(obs: dict[str, str], table_x: Table) -> dict[str, Any]:
+    """Abscisse d'un point de série dans l'unité canonique ; rien pour une observation isolée."""
+    x = nombre(obs.get("x"))
+    if x is None:
+        return {}
+    regle = table_x.get(cle_unite(obs.get("unite_x", "")))
+    if regle is None:
+        return {"x_n": None, "unite_x_n": "", "note_x": f"unité de x « {obs.get('unite_x', '')} » inconnue"}
+    return {"x_n": round(x * regle[1], 6), "unite_x_n": regle[0]}
+
+
+def normaliser(obs: dict[str, str], conv: dict[str, Any], table: Table, table_x: Table) -> dict[str, Any]:
+    resultat = _normaliser_valeur(obs, conv, table)
+    abscisse = normaliser_x(obs, table_x)
+    note_x = abscisse.pop("note_x", "")
+    if note_x:
+        resultat["notes"] = " ; ".join(filter(None, [resultat.get("notes", ""), note_x]))
+    return {**resultat, **abscisse}
+
+
+def _normaliser_valeur(obs: dict[str, str], conv: dict[str, Any], table: Table) -> dict[str, Any]:
     notes = []
     regle = table.get(cle_unite(obs["unite"]))
     if regle is None:
@@ -134,7 +164,7 @@ def main() -> int:
         print("sorties/observations.csv absent ou vide : lancer verifier.py", file=sys.stderr)
         return 1
     decisions = {(d["document"], d["obs"]): d for d in lire_csv(SORTIES / "decisions.csv")}
-    conv, table = charger_conversions()
+    conv, table, table_x = charger_conversions()
 
     lignes, inconnues = [], Counter()
     for obs in observations:
@@ -153,9 +183,11 @@ def main() -> int:
         if obs["verification"] == "a_revoir" and choix not in ("garder", "corriger") and not args.inclure_a_revoir:
             lignes.append({**obs, "normalisation": "a_revoir", "notes": "non contrôlée (decisions.csv)"})
             continue
-        resultat = normaliser(obs, conv, table)
+        resultat = normaliser(obs, conv, table, table_x)
         if resultat["normalisation"] == "unite_inconnue":
             inconnues[(obs["parametre"], obs["unite"])] += 1
+        if "unite_x_n" in resultat and not resultat["unite_x_n"]:
+            inconnues[(obs["parametre"], f"x : {obs.get('unite_x', '')} (unites_variable)")] += 1
         lignes.append({**obs, **resultat})
 
     ecrire_csv(SORTIES / "observations_normalisees.csv", lignes)

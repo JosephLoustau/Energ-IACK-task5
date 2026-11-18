@@ -4,7 +4,7 @@
 
 Le relevé manuel et la liste de paramètres n'ont pas le même vocabulaire : la comparaison se fait sur les NOMBRES.
 Une ligne du relevé est « retrouvée » si l'une de ses valeurs (valeur, min, max) figure parmi les nombres extraits du
-même document (observations et autres valeurs, écart relatif ≤ 1 %).
+même document (observations, points des séries et valeurs hors cadre, écart relatif ≤ 1 %).
 
 Le relevé n'est pas exhaustif et peut contenir des valeurs converties : le rappel mesuré est une borne basse.
 Les valeurs extraites absentes du relevé ne sont pas des erreurs a priori : en contrôler un échantillon à la main.
@@ -18,7 +18,7 @@ import csv
 import sys
 from typing import Any
 
-from commun import CSV_REFERENCE, SORTIES, charger_extractions, ecrire_csv, source_id
+from commun import CSV_REFERENCE, SORTIES, charger_extractions, ecrire_csv, observations_a_plat, source_id
 
 TOLERANCE = 0.01
 
@@ -37,13 +37,14 @@ def proche(a: float, b: float) -> bool:
 def valeurs_extraites(ext: dict[str, Any]) -> list[tuple[float, str]]:
     """(nombre, origine) pour toutes les valeurs extraites d'un document."""
     sortie = []
-    for obs in ext["observations"]:
+    for obs in observations_a_plat(ext):
         for cle in ("valeur", "valeur_min", "valeur_max"):
             if obs.get(cle) is not None:
                 sortie.append((float(obs[cle]), obs["parametre"]))
-    for v in ext["autres_valeurs"]:
-        if v.get("valeur") is not None:
-            sortie.append((float(v["valeur"]), f"autres_valeurs : {v['grandeur']}"))
+    for v in ext["hors_cadre"]:
+        for cle in ("valeur", "valeur_min", "valeur_max"):
+            if v.get(cle) is not None:
+                sortie.append((float(v[cle]), f"hors_cadre ({v['raison']}) : {v['parametre'] or v['description'][:40]}"))
     return sortie
 
 
@@ -72,10 +73,11 @@ def main() -> int:
                            "mesure": r["mesure"], "valeur": r["valeur"], "valeur_min": r["valeur_min"],
                            "valeur_max": r["valeur_max"], "unite": r["unite"], "localisation": r["localisation"],
                            "retrouvee": bool(correspondances), "parametres_extraits": " ; ".join(correspondances)})
-        for i, obs in enumerate(ext["observations"], 1):
+        for obs in observations_a_plat(ext):
             vals = [obs[k] for k in ("valeur", "valeur_min", "valeur_max") if obs.get(k) is not None]
             if vals and not any(proche(float(v), c) for v in vals for c in nombres_releve):
-                en_plus.append({"document": nom, "obs": i, "parametre": obs["parametre"], "element": obs["element"],
+                en_plus.append({"document": nom, "obs": obs["obs"], "parametre": obs["parametre"],
+                                "element": obs["element"], "x": obs["x"], "unite_x": obs["unite_x"],
                                 "valeur": obs["valeur"], "valeur_min": obs["valeur_min"], "valeur_max": obs["valeur_max"],
                                 "unite": obs["unite"], "page": obs["page"], "citation": obs["citation"],
                                 "controle": ""})

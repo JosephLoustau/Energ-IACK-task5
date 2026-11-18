@@ -1,5 +1,1 @@
-Extrais de ce document les valeurs des paramètres suivants, en respectant les règles.
-
-<parametres>
-{parametres}
-</parametres>
+Extrais maintenant les valeurs des paramètres du lot « {lot} », élément par élément de ton inventaire, en respectant les règles du premier message. Pour chaque élément, relève autant de valeurs que son `n_valeurs` l'annonce, en observations ou en `hors_cadre`.

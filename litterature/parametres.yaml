@@ -3,7 +3,7 @@
 # Point de départ : constantes de src/renovation.ts et src/model.ts (état de la branche main, 2026-11-14).
 # Ce fichier est le contrat de la pipeline : le prompt d'extraction et le schéma JSON sont générés à partir de lui.
 # À enrichir avec la passe « découverte » (grandeurs fréquentes dans la littérature, absentes du modèle) et les
-# valeurs récurrentes du champ `autres_valeurs` des extractions.
+# valeurs récurrentes de `hors_cadre` (raison hors_liste) des extractions.
 #
 # Champs d'un paramètre :
 #   id               identifiant stable (snake_case), utilisé dans les extractions
@@ -22,7 +22,7 @@
 # Hors périmètre volontaire (valeurs réglementaires, pas à confronter à la littérature) : seuils IDC du REn et du
 # PDE, conversions IDC de l'OCEN, taxe CO₂, valeur limite RECMC.
 
-version: 1
+version: 2
 
 parametres:
 
@@ -288,8 +288,8 @@ parametres:
       en fonction de la puissance installée.
     unite: CHF/installation
     valeur_modele:
-      pac_air_eau_kCHF_par_kW: {5: 47.9, 10: 52.7, 20: 72.8, 70: 185.6, 100: 284.5, 200: 641.1}
-      cad_kCHF_par_kW: {5: 24.9, 10: 30.8, 20: 43.9, 70: 131.5, 100: 182.6, 200: 416.4}
+      pac_air_eau_kCHF_total_selon_kW: {5: 47.9, 10: 52.7, 20: 72.8, 70: 185.6, 100: 284.5, 200: 641.1}
+      cad_kCHF_total_selon_kW: {5: 24.9, 10: 30.8, 20: 43.9, 70: 131.5, 100: 182.6, 200: 416.4}
     source_modele: LICS2022 Annexe 11.1 Fig. 47 (lecture graphique, changement de système)
     statut_modele: source
     comparaison: manuelle   # courbe ou table : pas de comparaison automatique valeur par valeur
@@ -299,7 +299,9 @@ parametres:
       fr: [coût d'une pompe à chaleur, raccordement au chauffage à distance, coût par kW, changement de système]
       de: [Investitionskosten Wärmepumpe, Fernwärmeanschluss, Kosten pro kW, Systemwechsel]
       en: [heat pump installation cost, district heating connection cost, cost per kW]
-    remarque: Relever la puissance associée à chaque coût ; une valeur en CHF/kW sans puissance perd son sens.
+    remarque: >
+      Relever la puissance associée à chaque coût ; une valeur en CHF/kW sans puissance perd son sens. Un tableau
+      ou une courbe coût–puissance donne une série (variable puissance), jamais une moyenne ou une plage.
 
   - id: puissance_specifique
     famille: production_chaleur
@@ -703,6 +705,7 @@ lots:
 # Champs de contexte. Chaque observation les porte tous ; ceux listés dans `contexte` d'un paramètre sont à chercher
 # activement. Valeur par défaut : non_precise (le document ne le dit pas) — jamais deviner.
 # Les listes fermées gardent les valeurs comparables ; `autre` + `remarque` pour le reste.
+# `nombre_ou_plage` : un nombre, une plage {"min": …, "max": …} ou non_precise.
 # Test de complétude : si deux valeurs d'un même paramètre diffèrent de plus d'un facteur 2 et qu'aucun de ces champs
 # ne l'explique, il en manque un : l'ajouter ici et ré-extraire.
 # ---------------------------------------------------------------------------------------------------------------------
@@ -751,10 +754,12 @@ contextes:
     valeurs: [gaz, mazout, electricite, cad, bois, pac, solaire, autre, non_precise]
   temperature_depart:
     description: Température de départ du chauffage (°C) pour une PAC.
-    valeurs: nombre ou non_precise
+    valeurs: nombre_ou_plage
   puissance_kw:
-    description: Puissance de l'installation à laquelle la valeur se rapporte (kW thermique ou kWc).
-    valeurs: nombre ou non_precise
+    description: >
+      Puissance de l'installation à laquelle la valeur se rapporte (kW thermique ou kWc) ; une plage si le document
+      donne une plage de puissances (ex. « installations de 10 à 100 kW »).
+    valeurs: nombre_ou_plage
   moment:
     valeurs: [avant, apres, non_precise]
   taille_echantillon:
@@ -763,3 +768,20 @@ contextes:
   nature:
     description: Origine de la valeur.
     valeurs: [mesure_terrain, simulation, norme_ou_reglement, hypothese_auteur, enquete_prix, repris_d_une_autre_source, non_precise]
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Grandeurs en abscisse d'une série (observation de forme `serie` : une ligne de tableau, une courbe). Liste fermée
+# pour que les séries de sources différentes restent comparables ; `autre` + `description` pour le reste.
+# ---------------------------------------------------------------------------------------------------------------------
+variables_serie:
+  puissance: Puissance de l'installation (kW thermique, kWc…).
+  surface: Surface de référence ou de l'élément traité (m² SRE, m² de façade…).
+  epaisseur: Épaisseur d'isolant ou de la couche ajoutée.
+  valeur_u: Coefficient de transmission thermique U visé ou atteint.
+  consommation: Consommation d'énergie ou IDC (avant rénovation, sauf indication contraire).
+  taille_batiment: Nombre de logements, d'étages, volume ou autre mesure de la taille du bâtiment.
+  longueur: Longueur (raccordement, conduite, façade…).
+  temperature: Température (de départ, extérieure…).
+  annee: Année (de construction, de mesure, des prix…).
+  autre: Autre grandeur, à décrire dans `description`.

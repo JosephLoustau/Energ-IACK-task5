@@ -77,6 +77,31 @@ unites:
     - {alias: ["-", ratio, facteur, factor, cop, jaz, spf, scop], facteur: 1}
     - {alias: ["%"], facteur: 0.01}
 
+# Unités de l'abscisse x des séries (variable_serie), même syntaxe que `unites`. Une unité absente : x n'est pas
+# converti (x_n vide, signalé dans `notes`), la valeur reste utilisable.
+unites_variable:
+  kW:
+    - {alias: [kw, kwth, kwt, kwel, kwc, kwp], facteur: 1}
+    - {alias: [w, wth, wp, wc], facteur: 0.001}
+    - {alias: [mw, mwth, mwp], facteur: 1000}
+  m2:
+    - {alias: [m2, m2sre, m2ebf, m2ae, m2element], facteur: 1}
+  cm:
+    - {alias: [cm], facteur: 1}
+    - {alias: [mm], facteur: 0.1}
+  m:
+    - {alias: [m], facteur: 1}
+    - {alias: [km], facteur: 1000}
+  W/(m2·K):
+    - {alias: [w/m2k, w/m2/k, wm-2k-1], facteur: 1}
+  kWh/(m2·a):
+    - {alias: [kwh/m2a, kwh/m2/a, kwh/m2an, kwh/m2y, kwh/m2yr, kwh/m2, kwh/m2sre, kwh/m2sre/a], facteur: 1}
+    - {alias: [mj/m2a, mj/m2/a, mj/m2an, mj/m2, mj/m2sre, mj/m2ae, mj/m2ae/a], facteur: 0.277777778}
+  °C:
+    - {alias: ["°c", c, degc], facteur: 1}
+  a:
+    - {alias: [a, an, annee, year, jahr], facteur: 1}
+
 # Taux de TVA (en part) par pays et période [AFC, taux normal]. Une valeur TTC est ramenée HT en divisant par (1 + taux).
 # Pays absents : TVA laissée telle quelle et signalée.
 tva:

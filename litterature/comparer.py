@@ -2,13 +2,14 @@
 
     python litterature/comparer.py
 
-Entrée : sorties/agregats.csv (étape 7). Une valeur du modèle déclinée (ex. {facade: 200, toit: 250}) est rapprochée
+Entrées : sorties/agregats.csv et sorties/courbes.csv (étape 7). Une valeur du modèle déclinée (ex. {facade: 200, toit: 250}) est rapprochée
 des groupes de même déclinaison ; le rapprochement des noms est approximatif (préfixe commun : « cave_sol » ↔ « cave »,
 « Électrique » ↔ « electricite ») et la déclinaison retenue est affichée dans `declinaison_litterature` : à contrôler.
 
 Alertes : aucune_valeur, peu_de_sources (< 3), hors_plage, extreme (percentile < 10 ou > 90), unite_differente,
 comparaison_manuelle (courbe ou table : à comparer à la main), sortie_du_modele (paramètre calculé : à comparer aux
-résultats du modèle pour des cas similaires).
+résultats du modèle pour des cas similaires), voir_courbes (la littérature donne aussi des séries : sorties/courbes.csv),
+seulement_courbes (aucune valeur isolée, uniquement des séries).
 
 Sorties : sorties/comparaison.csv et sorties/prompt_commentaire.md (prompt prêt à coller dans le chat pour commenter
 les écarts).
@@ -63,13 +64,14 @@ def valeurs_modele(p: dict[str, Any]) -> list[tuple[str, Any]]:
     return [("", v)]
 
 
-def comparer(p: dict[str, Any], cle: str, valeur: Any, groupes: list[dict[str, str]]) -> list[dict[str, Any]]:
+def comparer(p: dict[str, Any], cle: str, valeur: Any, groupes: list[dict[str, str]],
+             n_points_courbes: int = 0) -> list[dict[str, Any]]:
     base = {"parametre": p["id"], "famille": p["famille"], "priorite": p["priorite"], "statut_modele": p["statut_modele"],
             "declinaison_modele": cle, "valeur_modele": valeur, "unite_modele": p["unite"],
-            "source_modele": p["source_modele"]}
+            "source_modele": p["source_modele"], "n_points_courbes": n_points_courbes}
     candidats = [g for g in groupes if not cle or not g["declinaison"] or correspond(cle, g["declinaison"])]
     if not candidats:
-        return [{**base, "alerte": "aucune_valeur"}]
+        return [{**base, "alerte": "seulement_courbes" if n_points_courbes else "aucune_valeur"}]
     lignes = []
     for g in candidats:
         alertes = []
@@ -77,7 +79,7 @@ def comparer(p: dict[str, Any], cle: str, valeur: Any, groupes: list[dict[str, s
                  "base_surface": g["base_surface"], "n_sources": g["n_sources"], "n_valeurs": g["n_valeurs"],
                  "min": g["min"], "q25": g["q25"], "mediane": g["mediane"], "q75": g["q75"], "max": g["max"],
                  "n_nominal": g["n_nominal"], "pays": g["pays"], "nature": g["nature"],
-                 "annees_prix": g["annees_prix"], "sources": g["sources"]}
+                 "annees_prix": g["annees_prix"], "puissances_kw": g.get("puissances_kw", ""), "sources": g["sources"]}
         if int(g["n_sources"]) < PEU_DE_SOURCES:
             alertes.append("peu_de_sources")
         if not unite_comparable(p["unite"], g["unite_n"]):
@@ -100,6 +102,8 @@ def comparer(p: dict[str, Any], cle: str, valeur: Any, groupes: list[dict[str, s
                 if float(g["mediane"]) else None
             if "hors_plage" not in alertes and (pct < 10 or pct > 90):
                 alertes.append("extreme")
+        if n_points_courbes:
+            alertes.append("voir_courbes")
         lignes.append({**ligne, "alerte": ", ".join(alertes)})
     return lignes
 
@@ -107,9 +111,13 @@ def comparer(p: dict[str, Any], cle: str, valeur: Any, groupes: list[dict[str, s
 def main() -> int:
     config = charger_parametres()
     agregats = lire_csv(SORTIES / "agregats.csv")
-    if not agregats:
-        print("sorties/agregats.csv absent ou vide : lancer agreger.py", file=sys.stderr)
+    points = lire_csv(SORTIES / "courbes.csv")
+    if not agregats and not points:
+        print("sorties/agregats.csv et courbes.csv absents ou vides : lancer agreger.py", file=sys.stderr)
         return 1
+    n_points: dict[str, int] = defaultdict(int)
+    for point in points:
+        n_points[point["parametre"]] += 1
     par_parametre: dict[str, list[dict[str, str]]] = defaultdict(list)
     for g in agregats:
         par_parametre[g["parametre"]].append(g)
@@ -117,13 +125,13 @@ def main() -> int:
     lignes = []
     for p in config["parametres"]:
         for cle, valeur in valeurs_modele(p):
-            lignes.extend(comparer(p, cle, valeur, par_parametre.get(p["id"], [])))
+            lignes.extend(comparer(p, cle, valeur, par_parametre.get(p["id"], []), n_points[p["id"]]))
     ordre = {"haute": 0, "moyenne": 1, "basse": 2}
     lignes.sort(key=lambda l: (ordre.get(l["priorite"], 3), l["parametre"], l["declinaison_modele"]))
     colonnes = ["parametre", "declinaison_modele", "valeur_modele", "unite_modele", "declinaison_litterature",
                 "moment", "unite_litterature", "base_surface", "n_sources", "n_valeurs", "min", "q25", "mediane", "q75", "max",
-                "percentile_modele", "ecart_mediane_pct", "alerte", "priorite", "statut_modele", "famille", "n_nominal",
-                "pays", "nature", "annees_prix", "source_modele", "sources"]
+                "percentile_modele", "ecart_mediane_pct", "alerte", "n_points_courbes", "puissances_kw", "priorite",
+                "statut_modele", "famille", "n_nominal", "pays", "nature", "annees_prix", "source_modele", "sources"]
     ecrire_csv(SORTIES / "comparaison.csv", lignes, colonnes)
 
     tampon = io.StringIO()

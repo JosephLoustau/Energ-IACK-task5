@@ -3,11 +3,17 @@
     python litterature/agreger.py
 
 Entrée : sorties/observations_normalisees.csv (étape 6), lignes « ok » et « nominal » seulement.
-Regroupement : paramètre × déclinaison × moment (avant / après) × unité normalisée × base de surface. Les valeurs d'un groupe sont d'abord
-réduites à une valeur par source (médiane), la source étant la source primaire si le document reprend une autre
-publication : une même valeur citée par plusieurs documents ne compte qu'une fois.
 
-Sortie : sorties/agregats.csv.
+Valeurs isolées (forme `valeur`) -> sorties/agregats.csv. Regroupement : paramètre × déclinaison × moment (avant /
+après) × unité normalisée × base de surface. Les valeurs d'un groupe sont d'abord réduites à une valeur par source
+(médiane), la source étant la source primaire si le document reprend une autre publication : une même valeur citée par
+plusieurs documents ne compte qu'une fois. La colonne `puissances_kw` donne l'étendue des puissances du groupe : un
+groupe qui mélange des tailles très différentes mélange aussi des coûts unitaires différents.
+
+Points de séries (forme `serie`) -> sorties/courbes.csv, un point par ligne, SANS réduction à une médiane : la
+dépendance à x (puissance, épaisseur…) est justement ce qu'on veut comparer au modèle. À lire source par source (une
+courbe par source, déclinaison et variable) plutôt qu'en nuage commun, pour ne pas confondre l'effet de x avec un effet
+de contexte (pays, année des prix, type de bâtiment).
 """
 from __future__ import annotations
 
@@ -54,6 +60,41 @@ def resume(valeurs: set[str]) -> str:
     return ", ".join(sorted(v for v in valeurs if v not in NON_PRECISE))
 
 
+def source(obs: dict[str, str]) -> str:
+    return obs.get("source_primaire") if obs.get("source_primaire") not in NON_PRECISE else obs["source_id"]
+
+
+def etendue(obs_groupe: list[dict[str, str]], champ: str) -> str:
+    bornes = [b for o in obs_groupe for b in (nombre(o.get(f"{champ}_min")), nombre(o.get(f"{champ}_max"))) if b is not None]
+    if not bornes:
+        return ""
+    sans = sum(nombre(o.get(f"{champ}_min")) is None and nombre(o.get(f"{champ}_max")) is None for o in obs_groupe)
+    texte = f"{min(bornes):g}" if min(bornes) == max(bornes) else f"{min(bornes):g}-{max(bornes):g}"
+    return texte + (f" ({sans} sans)" if sans else "")
+
+
+COLONNES_COURBES = ["parametre", "declinaison", "variable", "unite_x_n", "source", "document", "obs", "x_n", "valeur_n",
+                    "valeur_min_n", "valeur_max_n", "unite_n", "base_surface", "moment", "normalisation", "verification",
+                    "lecture", "pays", "annee_prix", "nature", "type_batiment", "cas", "x", "unite_x", "notes"]
+
+
+def courbes(series: list[dict[str, str]], parametres: dict[str, Any]) -> list[dict[str, Any]]:
+    lignes = []
+    for obs in series:
+        lignes.append({
+            **{k: obs.get(k, "") for k in ("parametre", "variable", "unite_x_n", "document", "obs", "x_n", "valeur_min_n",
+                                          "valeur_max_n", "unite_n", "normalisation", "verification", "lecture", "x",
+                                          "unite_x", "notes")},
+            "declinaison": declinaison(obs, parametres[obs["parametre"]]), "source": source(obs),
+            "valeur_n": valeur_representative(obs), "base_surface": obs.get("ctx_base_surface", ""),
+            "moment": obs.get("ctx_moment", ""),
+            **{c: obs.get(f"ctx_{c}", "") for c in ("pays", "annee_prix", "nature", "type_batiment", "cas")},
+        })
+    lignes.sort(key=lambda l: (l["parametre"], l["declinaison"], l["variable"], l["source"], l["document"],
+                               nombre(l["x_n"]) if nombre(l["x_n"]) is not None else float("inf")))
+    return lignes
+
+
 def main() -> int:
     config = charger_parametres()
     parametres = {p["id"]: p for p in config["parametres"]}
@@ -64,9 +105,13 @@ def main() -> int:
         return 1
 
     groupes: dict[tuple[str, ...], list[dict[str, str]]] = defaultdict(list)
+    series = []
     for obs in observations:
         p = parametres.get(obs["parametre"])
         if p is None or valeur_representative(obs) is None:
+            continue
+        if obs.get("forme") == "serie":
+            series.append(obs)
             continue
         groupes[(obs["parametre"], declinaison(obs, p), obs.get("ctx_moment", ""), obs["unite_n"],
                   obs.get("ctx_base_surface", ""))].append(obs)
@@ -75,8 +120,7 @@ def main() -> int:
     for (parametre, decl, moment, unite, base), obs_groupe in sorted(groupes.items()):
         par_source: dict[str, list[float]] = defaultdict(list)
         for obs in obs_groupe:
-            source = obs.get("source_primaire") if obs.get("source_primaire") not in NON_PRECISE else obs["source_id"]
-            par_source[source].append(valeur_representative(obs))
+            par_source[source(obs)].append(valeur_representative(obs))
         valeurs = sorted(statistics.median(v) for v in par_source.values())
         lignes.append({
             "parametre": parametre, "declinaison": decl, "moment": moment, "unite_n": unite, "base_surface": base,
@@ -91,9 +135,14 @@ def main() -> int:
             "annees_prix": resume({o.get("ctx_annee_prix", "") for o in obs_groupe}),
             "type_batiment": resume({o.get("ctx_type_batiment", "") for o in obs_groupe}),
             "cas": resume({o.get("ctx_cas", "") for o in obs_groupe}),
+            "puissances_kw": etendue(obs_groupe, "ctx_puissance_kw"),
         })
     ecrire_csv(SORTIES / "agregats.csv", lignes)
     print(f"{len(lignes)} groupe(s) sur {len({l['parametre'] for l in lignes})} paramètre(s) → {SORTIES / 'agregats.csv'}")
+    points = courbes(series, parametres)
+    ecrire_csv(SORTIES / "courbes.csv", points, COLONNES_COURBES)
+    n_courbes = len({(l["parametre"], l["declinaison"], l["variable"], l["source"], l["document"]) for l in points})
+    print(f"{len(points)} point(s) de série, {n_courbes} courbe(s) → {SORTIES / 'courbes.csv'}")
     return 0
 
 

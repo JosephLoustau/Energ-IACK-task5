@@ -4,14 +4,17 @@
     python litterature/assembler.py GRANDJEAN2021   # un document
 
 Rangement attendu des réponses (une réponse = un fichier, contenu collé tel quel, bloc ```json compris) :
-    sorties/manuel/<DOCUMENT>/<lot>__1_extraction.json
-    sorties/manuel/<DOCUMENT>/<lot>__2_relecture.json
+    sorties/manuel/<DOCUMENT>/<lot>__1_inventaire.json
+    sorties/manuel/<DOCUMENT>/<lot>__2_extraction.json
+    sorties/manuel/<DOCUMENT>/<lot>__3_relecture.json
 avec <DOCUMENT> = nom du PDF dans corpus/ sans .pdf, et <lot> = tout, A_enveloppe, B_systemes ou C_performance_economie
-(le même préfixe que le prompt utilisé). Réponse en plusieurs messages (« SUITE ») : suffixes __1_extraction_2.json,
-__1_extraction_3.json…
+(le même préfixe que le prompt utilisé). Réponse en plusieurs messages (« SUITE ») : suffixes __2_extraction_2.json,
+__2_extraction_3.json…
 
-Chaque réponse est vérifiée contre le format attendu ; un document avec une réponse non conforme n'est pas assemblé
-(corriger le fichier, ou redemander la réponse dans le chat, puis relancer).
+Chaque réponse est vérifiée contre le format attendu et contre les règles de cohérence (forme valeur / série) ; un
+document avec une réponse non conforme n'est pas assemblé (corriger le fichier, ou redemander la réponse dans le chat,
+puis relancer). Sont signalés sans bloquer : paramètres sans couverture, éléments de l'inventaire non traités ou
+partiels, références à un élément absent de l'inventaire.
 Sortie : sorties/extraction/<DOCUMENT>.json.
 """
 from __future__ import annotations
@@ -24,12 +27,13 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from commun import (EXTRACTION, MANUEL, ecrire_json, empreinte_parametres, fusionner, lire_reponse, pdf_du_document,
+from commun import (ETAPES, EXTRACTION, MANUEL, ajouter_inventaire, bilan_inventaire, ecrire_json,
+                    empreinte_parametres, fusionner, lire_reponse, pdf_du_document, references_inconnues,
                     resultat_vide, valider, verifier_couverture)
-from schema import charger_parametres, lots, schema_sortie
+from schema import charger_parametres, controler_coherence, lots, schema_inventaire, schema_sortie
 
 MAX_ERREURS_AFFICHEES = 8
-MOTIF = re.compile(r"^(?P<lot>.+?)__(?P<etape>1_extraction|2_relecture)(?:_(?P<partie>\d+))?\.(json|txt|md)$")
+MOTIF = re.compile(rf"^(?P<lot>.+?)__(?P<etape>{'|'.join(ETAPES)})(?:_(?P<partie>\d+))?\.(json|txt|md)$")
 
 
 def fichiers_du_document(dossier: Path) -> tuple[dict[tuple[str, str], list[Path]], list[str]]:
@@ -53,9 +57,11 @@ def assembler(dossier: Path, config: dict[str, Any]) -> tuple[dict[str, Any] | N
     for lot in lots_presents:
         if lot not in ids_par_lot:
             return None, problemes + [f"lot inconnu « {lot} » (attendu : {', '.join(ids_par_lot)})"]
-        if (lot, "1_extraction") not in fichiers:
-            return None, problemes + [f"lot {lot} : relecture sans extraction"]
-        if (lot, "2_relecture") not in fichiers:
+        if (lot, "1_inventaire") not in fichiers:
+            return None, problemes + [f"lot {lot} : pas d'inventaire ({lot}__1_inventaire.json)"]
+        if (lot, "2_extraction") not in fichiers:
+            return None, problemes + [f"lot {lot} : pas d'extraction ({lot}__2_extraction.json)"]
+        if (lot, "3_relecture") not in fichiers:
             problemes.append(f"lot {lot} : pas de relecture (assemblé quand même)")
     if not lots_presents:
         return None, problemes + ["aucune réponse"]
@@ -65,20 +71,29 @@ def assembler(dossier: Path, config: dict[str, Any]) -> tuple[dict[str, Any] | N
     resultat = resultat_vide()
     erreurs = []
     for lot in lots_presents:
-        schema = schema_sortie(config, ids_par_lot[lot])
-        for etape in ("1_extraction", "2_relecture"):
+        schemas = {"1_inventaire": schema_inventaire(config, ids_par_lot[lot]),
+                   "2_extraction": schema_sortie(config, ids_par_lot[lot]),
+                   "3_relecture": schema_sortie(config, ids_par_lot[lot])}
+        for etape in ETAPES:
             for f in fichiers.get((lot, etape), []):
                 try:
                     reponse = lire_reponse(f.read_text(encoding="utf-8"))
                 except ValueError as e:  # json.JSONDecodeError en hérite
                     erreurs.append(f"{f.name} : JSON illisible ({e})")
                     continue
-                fautes = valider(reponse, schema)
+                fautes = valider(reponse, schemas[etape])
+                if not fautes and etape != "1_inventaire":
+                    fautes = controler_coherence(reponse)
                 erreurs.extend(f"{f.name} : {e}" for e in fautes[:MAX_ERREURS_AFFICHEES])
                 if len(fautes) > MAX_ERREURS_AFFICHEES:
                     erreurs.append(f"{f.name} : … et {len(fautes) - MAX_ERREURS_AFFICHEES} autre(s) erreur(s) de format")
-                if not erreurs:
-                    fusionner(resultat, reponse, etape.split("_", 1)[1], lot)
+                if erreurs:
+                    continue
+                passe = etape.split("_", 1)[1]
+                if etape == "1_inventaire":
+                    ajouter_inventaire(resultat, reponse, passe, lot)
+                else:
+                    fusionner(resultat, reponse, passe, lot)
     if erreurs:
         return None, problemes + erreurs
 
@@ -86,6 +101,15 @@ def assembler(dossier: Path, config: dict[str, Any]) -> tuple[dict[str, Any] | N
     sans = verifier_couverture(resultat, ids_attendus)
     if sans:
         problemes.append(f"paramètres sans couverture (sautés par le modèle) : {', '.join(sans)}")
+    inconnues = references_inconnues(resultat)
+    if inconnues:
+        problemes.append(f"source_inventaire absente de l'inventaire : {', '.join(inconnues)}")
+    bilan = bilan_inventaire(resultat)
+    for statut in ("non_traite", "partiel"):
+        elements = [f"{b['lot']}/{b['id']} {b['emplacement']} ({b['n_releves']}/{b['n_valeurs']})"
+                    for b in bilan if b["statut"] == statut]
+        if elements:
+            problemes.append(f"inventaire, {statut.replace('_', ' ')} : {', '.join(elements)}")
     lots_manquants = [lot for lot in ids_par_lot if lot != "tout" and lot not in lots_presents]
     if "tout" not in lots_presents and lots_manquants:
         problemes.append(f"lots non traités : {', '.join(lots_manquants)}")
@@ -101,6 +125,7 @@ def assembler(dossier: Path, config: dict[str, Any]) -> tuple[dict[str, Any] | N
         "version_parametres": config.get("version"),
         "sha256_parametres": empreinte_parametres(),
         "parametres_sans_couverture": sans,
+        "references_inventaire_inconnues": inconnues,
     }
     if pdf is None:
         problemes.append(f"pas de corpus/{dossier.name}.pdf : la vérification des citations (étape 4) sera impossible")
@@ -130,9 +155,12 @@ def main() -> int:
         else:
             ecrire_json(EXTRACTION / f"{dossier.name}.json", resultat)
             trouves = sum(c["statut"] == "trouve" for c in resultat["couverture"])
-            print(f"✓ {dossier.name} : {len(resultat['observations'])} observation(s), "
+            series = [o for o in resultat["observations"] if o["forme"] == "serie"]
+            print(f"✓ {dossier.name} : {len(resultat['inventaire'])} élément(s) inventorié(s), "
+                  f"{len(resultat['observations'])} observation(s) dont {len(series)} série(s) "
+                  f"({sum(len(o['points']) for o in series)} points), "
                   f"{trouves}/{len(resultat['couverture'])} paramètre(s) trouvé(s), "
-                  f"{len(resultat['autres_valeurs'])} autre(s) valeur(s)")
+                  f"{len(resultat['hors_cadre'])} valeur(s) hors cadre")
         for p in problemes:
             print(f"    {p}")
     return 1 if echecs else 0
