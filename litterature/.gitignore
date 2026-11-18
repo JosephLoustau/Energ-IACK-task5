@@ -1,0 +1,9 @@
+# PDF sources (droits d'auteur) et prompts générés par generer_prompts.py
+corpus/
+prompts_manuels/
+
+# Sorties : seul le travail fait à la main est versionné (réponses collées, contrôles, annotations)
+sorties/*
+!sorties/manuel/
+!sorties/decisions.csv
+!sorties/evaluation_en_plus.csv

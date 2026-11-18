@@ -1,0 +1,765 @@
+# Liste des paramètres à confronter à la littérature.
+#
+# Point de départ : constantes de src/renovation.ts et src/model.ts (état de la branche main, 2026-11-14).
+# Ce fichier est le contrat de la pipeline : le prompt d'extraction et le schéma JSON sont générés à partir de lui.
+# À enrichir avec la passe « découverte » (grandeurs fréquentes dans la littérature, absentes du modèle) et les
+# valeurs récurrentes du champ `autres_valeurs` des extractions.
+#
+# Champs d'un paramètre :
+#   id               identifiant stable (snake_case), utilisé dans les extractions
+#   famille          regroupement (même vocabulaire que docs/renovation/parametres_renovation.csv quand possible)
+#   definition       ce que mesure le paramètre, assez précis pour que l'extracteur ne confonde pas avec un voisin
+#   unite            unité canonique après normalisation (l'extraction garde l'unité d'origine)
+#   valeur_modele    valeur(s) utilisée(s) par le modèle ; dictionnaire si elle dépend d'une dimension (élément, agent…)
+#   source_modele    source_id de docs/renovation/sources.csv, ou « hypothèse modèle » / « fixé projet »
+#   statut_modele    source | hypothese_modele | fixe_projet | calcule (sortie du modèle, pas une constante)
+#   priorite         haute = hypothèse non sourcée ou forte influence sur les résultats ; moyenne ; basse
+#   contexte         champs de contexte à renseigner obligatoirement (voir `contextes` en fin de fichier)
+#   mots_cles        termes FR / DE / EN pour aider l'extracteur à repérer le paramètre
+#   remarque         précision utile à l'extraction ou à la comparaison
+#   comparaison      « manuelle » pour une courbe ou une table (l'étape 8 liste les valeurs sans calculer d'écart)
+#
+# Hors périmètre volontaire (valeurs réglementaires, pas à confronter à la littérature) : seuils IDC du REn et du
+# PDE, conversions IDC de l'OCEN, taxe CO₂, valeur limite RECMC.
+
+version: 1
+
+parametres:
+
+  # ---------------------------------------------------------------------------------------------------------------
+  # Enveloppe : coûts
+  # ---------------------------------------------------------------------------------------------------------------
+  - id: cout_investissement_enveloppe
+    famille: enveloppe
+    definition: >
+      Coût d'investissement d'une mesure d'isolation ou de remplacement d'un élément d'enveloppe existant, par m²
+      d'élément traité (pas par m² SRE). Inclut pose et frais annexes si le document les inclut (à préciser dans
+      perimetre_cout).
+    unite: CHF/m2_element
+    valeur_modele: {facade: 200, toit: 250, cave_sol: 120, fenetres: 1000}
+    source_modele: LICS2022 Tab. 18 (prix 2020) ; fenêtres LICS2022 Tab. 18 et 28 (830-1200, milieu de plage)
+    statut_modele: source
+    priorite: haute
+    contexte: [element, base_surface, cas, perimetre_cout, annee_prix, devise, tva, pays, type_batiment, nature]
+    mots_cles:
+      fr: [coût d'isolation, prix au m², isolation périphérique, ITE, remplacement des fenêtres, coût unitaire]
+      de: [Investitionskosten, Kosten pro m², Aussenwärmedämmung, Fassadendämmung, Dachdämmung, Kellerdecke, Fensterersatz]
+      en: [retrofit cost, insulation cost per m2, external wall insulation, window replacement cost, unit cost]
+    remarque: >
+      Distinguer le coût total, le coût « de toute façon » (remise en état non énergétique) et le surcoût
+      énergétique : c'est le champ `cas`. Le modèle utilise le coût total.
+
+  - id: cout_isolation_interieure
+    famille: enveloppe
+    definition: >
+      Coût d'investissement d'une isolation intérieure de façade (utilisée par le modèle pour les bâtiments
+      protégés), par m² d'élément.
+    unite: CHF/m2_element
+    valeur_modele: 122.3
+    source_modele: STREICHER2020 Tab. 3 (91.1 + 2.60 CHF/m² par cm, 12 cm ; isolation du sol utilisée comme proxy)
+    statut_modele: hypothese_modele
+    priorite: haute
+    contexte: [element, base_surface, perimetre_cout, annee_prix, devise, tva, pays, nature]
+    mots_cles:
+      fr: [isolation intérieure, isolation par l'intérieur, bâtiment protégé, patrimoine]
+      de: [Innendämmung, denkmalgeschützt, Kosten pro cm Dämmstärke]
+      en: [internal insulation, interior wall insulation, heritage building]
+    remarque: La valeur du modèle est un proxy ; toute valeur propre à l'isolation intérieure de façade est utile.
+
+  - id: cout_par_cm_isolant
+    famille: enveloppe
+    definition: Partie variable du coût d'isolation en fonction de l'épaisseur d'isolant (coût fixe + coût par cm).
+    unite: CHF/(m2_element·cm)
+    valeur_modele: {cave_sol_interieur: 2.6}
+    source_modele: STREICHER2020 Tab. 3
+    statut_modele: source
+    priorite: basse
+    contexte: [element, base_surface, annee_prix, devise, tva, pays, nature]
+    mots_cles:
+      fr: [coût par cm, épaisseur d'isolant, coût fixe]
+      de: [Kosten pro cm, Dämmstärke, Fixkosten]
+      en: [cost per cm, insulation thickness, fixed cost]
+
+  # ---------------------------------------------------------------------------------------------------------------
+  # Enveloppe : performances thermiques
+  # ---------------------------------------------------------------------------------------------------------------
+  - id: u_avant
+    famille: enveloppe
+    definition: Valeur U de l'élément existant avant rénovation (bâtiment non rénové).
+    unite: W/(m2·K)
+    valeur_modele: {facade: 1.0, toit: 0.6, cave_sol: 1.0, fenetres: 2.2}
+    source_modele: HFM2015 Tab. 5 ; fenêtres LICS2022 Tab. 28
+    statut_modele: source
+    priorite: haute
+    contexte: [element, periode_construction, pays, type_batiment, nature]
+    mots_cles:
+      fr: [valeur U, coefficient de transmission thermique, état initial, existant]
+      de: [U-Wert, Wärmedurchgangskoeffizient, Ist-Zustand, vor Sanierung]
+      en: [U-value, thermal transmittance, before retrofit, existing]
+    remarque: Très dépendant de la période de construction ; ne jamais laisser periode_construction vide si le document la donne.
+
+  - id: u_apres
+    famille: enveloppe
+    definition: Valeur U de l'élément après rénovation.
+    unite: W/(m2·K)
+    valeur_modele: {facade: 0.20, toit: 0.20, cave_sol: 0.25, fenetres: 1.0}
+    source_modele: HFM2015 Tab. 5 ; fenêtres LICS2022 Tab. 28
+    statut_modele: source
+    priorite: moyenne
+    contexte: [element, cas, pays, nature]
+    mots_cles:
+      fr: [valeur U après rénovation, valeur cible, exigence]
+      de: [U-Wert nach Sanierung, Zielwert, Grenzwert]
+      en: [U-value after retrofit, target U-value]
+
+  - id: facteur_reduction_contre_terre
+    famille: enveloppe
+    definition: >
+      Facteur de réduction b des déperditions d'un élément contre local non chauffé ou contre terre (plafond de
+      cave, dalle), avant et après rénovation.
+    unite: "-"
+    valeur_modele: {cave_sol_avant: 0.42, cave_sol_apres: 0.69}
+    source_modele: HFM2015 Tab. 5
+    statut_modele: source
+    priorite: basse
+    contexte: [element, nature]
+    mots_cles:
+      fr: [facteur de réduction, local non chauffé, contre terre]
+      de: [Reduktionsfaktor, b-Faktor, gegen unbeheizt, gegen Erdreich]
+      en: [reduction factor, unheated space, ground]
+
+  - id: conductivite_thermique_isolant
+    famille: enveloppe
+    definition: Conductivité thermique λ de l'isolant utilisé pour calculer l'épaisseur (et le carbone gris).
+    unite: W/(m·K)
+    valeur_modele: {EPS: 0.035}
+    source_modele: STREICHER2020 Paper III SM Eq. 7
+    statut_modele: source
+    priorite: basse
+    contexte: [materiau, nature]
+    mots_cles:
+      fr: [conductivité thermique, lambda]
+      de: [Wärmeleitfähigkeit, Lambda]
+      en: [thermal conductivity, lambda]
+
+  # ---------------------------------------------------------------------------------------------------------------
+  # Géométrie : surfaces d'éléments rapportées à la SRE (hypothèses modèle, aucune donnée d'élément disponible)
+  # ---------------------------------------------------------------------------------------------------------------
+  - id: ratio_surface_element_par_sre
+    famille: geometrie
+    definition: >
+      Surface d'un élément d'enveloppe par m² de SRE (façade brute = mur opaque + fenêtres, toiture, plafond de cave).
+      Équivaut au facteur d'enveloppe Ath/AE décomposé par élément.
+    unite: m2_element/m2_SRE
+    valeur_modele: {facade_brute: 1.0, toit: 0.33, cave_sol: 0.33}
+    source_modele: hypothèse modèle
+    statut_modele: hypothese_modele
+    priorite: haute
+    contexte: [element, type_batiment, periode_construction, nombre_etages, pays, nature]
+    mots_cles:
+      fr: [facteur d'enveloppe, compacité, surface d'enveloppe, surface de façade par SRE]
+      de: [Gebäudehüllzahl, Ath/AE, Kompaktheit, Fassadenfläche pro EBF]
+      en: [envelope to floor area ratio, compactness, shape factor, facade area per floor area]
+    remarque: Accepter aussi le facteur d'enveloppe global (Ath/AE) ; il se compare à la somme des ratios.
+
+  - id: part_vitree_facade
+    famille: geometrie
+    definition: Part des fenêtres dans la surface de façade brute (window-to-wall ratio).
+    unite: "-"
+    valeur_modele:
+      Logement: 0.20
+      Logement mixte: 0.25
+      Santé & social: 0.25
+      Administration: 0.60
+      Éducation: 0.40
+      Commerce & ateliers: 0.40
+      Culture & loisirs: 0.30
+      Sport: 0.30
+      defaut: 0.30
+    source_modele: Logement et Administration donnés par l'utilisateur ; autres affectations hypothèse modèle
+    statut_modele: hypothese_modele
+    priorite: haute
+    contexte: [type_batiment, periode_construction, pays, nature]
+    mots_cles:
+      fr: [part vitrée, taux de vitrage, surface de fenêtres]
+      de: [Fensteranteil, Fensterflächenanteil, Glasanteil]
+      en: [window-to-wall ratio, WWR, glazing ratio]
+
+  # ---------------------------------------------------------------------------------------------------------------
+  # Besoins et écart de performance
+  # ---------------------------------------------------------------------------------------------------------------
+  - id: part_economies_realisee
+    famille: ecart_performance
+    definition: >
+      Rapport entre l'économie d'énergie réellement mesurée après rénovation et l'économie théorique (calculée ou
+      annoncée). 1 = économie théorique entièrement atteinte.
+    unite: "-"
+    valeur_modele: 0.5
+    source_modele: KHOURY2016 ; COZZA2020 (~50 % pour 350 MJ/m²·a visés)
+    statut_modele: source
+    priorite: haute
+    contexte: [cas, type_batiment, pays, taille_echantillon, nature]
+    mots_cles:
+      fr: [écart de performance, économies réelles, économies mesurées, effet rebond]
+      de: [Performance Gap, tatsächliche Einsparung, gemessene Einsparung, Rebound]
+      en: [performance gap, energy savings deficit, actual savings, realization rate, rebound effect]
+    remarque: Accepter aussi les couples (économie théorique, économie mesurée) ; le ratio sera calculé ensuite.
+
+  - id: plafond_reduction_besoin_enveloppe
+    famille: ecart_performance
+    definition: >
+      Réduction maximale du besoin de chauffage atteignable par la seule rénovation de l'enveloppe (part du besoin
+      de chauffage initial).
+    unite: "-"
+    valeur_modele: 0.7
+    source_modele: hypothèse modèle
+    statut_modele: hypothese_modele
+    priorite: haute
+    contexte: [cas, element, type_batiment, periode_construction, pays, nature]
+    mots_cles:
+      fr: [réduction du besoin de chauffage, rénovation complète de l'enveloppe, potentiel d'économie]
+      de: [Reduktion Heizwärmebedarf, Gesamtsanierung Hülle, Einsparpotenzial]
+      en: [heating demand reduction, deep envelope retrofit, savings potential]
+
+  - id: besoin_ecs
+    famille: ecs
+    definition: Besoin de chaleur utile pour l'eau chaude sanitaire par m² de SRE et par an.
+    unite: kWh/(m2_SRE·a)
+    valeur_modele: 14
+    source_modele: LICS2022 §5.5 (mesures 12-15) ; SIA 380/1 EFH 14
+    statut_modele: source
+    priorite: moyenne
+    contexte: [type_batiment, base_surface, nature, pays]
+    mots_cles:
+      fr: [eau chaude sanitaire, ECS, besoin d'ECS]
+      de: [Warmwasser, Warmwasserbedarf]
+      en: [domestic hot water, DHW demand]
+
+  - id: degres_jours
+    famille: climat
+    definition: Degrés-jours de chauffage du site (préciser la base de température).
+    unite: K·d/a
+    valeur_modele: {Geneve_base_18_12: 2659}
+    source_modele: KHOURY2016
+    statut_modele: source
+    priorite: basse
+    contexte: [pays, nature]
+    mots_cles:
+      fr: [degrés-jours, DJU]
+      de: [Heizgradtage, HGT]
+      en: [heating degree days, HDD]
+
+  # ---------------------------------------------------------------------------------------------------------------
+  # Production de chaleur
+  # ---------------------------------------------------------------------------------------------------------------
+  - id: rendement_systeme_existant
+    famille: production_chaleur
+    definition: Rendement annuel (énergie utile / énergie finale) du système de chauffage existant, par agent.
+    unite: "-"
+    valeur_modele: {Gaz: 0.85, Mazout: 0.80, Gaz + mazout: 0.83, CAD: 0.95, Électrique: 1.0, Bois / biogaz: 0.80}
+    source_modele: HFM2015 Tab. 11 ; LICS2022 Tab. 7-8
+    statut_modele: source
+    priorite: moyenne
+    contexte: [agent_energetique, periode_construction, nature]
+    mots_cles:
+      fr: [rendement annuel, rendement de chaudière, rendement global]
+      de: [Jahresnutzungsgrad, Kesselwirkungsgrad]
+      en: [seasonal efficiency, boiler efficiency, annual efficiency]
+
+  - id: cop_annuel_pac
+    famille: production_chaleur
+    definition: Coefficient de performance annuel (JAZ / SCOP) d'une pompe à chaleur en rénovation.
+    unite: "-"
+    valeur_modele: {pac_air_eau_55C: 2.8}
+    source_modele: LICS2022 Tab. 7
+    statut_modele: source
+    priorite: haute
+    contexte: [element, temperature_depart, cas, pays, nature]
+    mots_cles:
+      fr: [COP annuel, coefficient de performance saisonnier, pompe à chaleur air/eau]
+      de: [Jahresarbeitszahl, JAZ, Luft/Wasser-Wärmepumpe, Vorlauftemperatur]
+      en: [seasonal performance factor, SPF, SCOP, air-source heat pump]
+    remarque: La température de départ (55 °C dans le modèle) change fortement la valeur ; la relever si elle est donnée.
+
+  - id: cout_investissement_production_chaleur
+    famille: production_chaleur
+    definition: >
+      Coût d'investissement d'un changement de système de production de chaleur (PAC air/eau ou raccordement CAD)
+      en fonction de la puissance installée.
+    unite: CHF/installation
+    valeur_modele:
+      pac_air_eau_kCHF_par_kW: {5: 47.9, 10: 52.7, 20: 72.8, 70: 185.6, 100: 284.5, 200: 641.1}
+      cad_kCHF_par_kW: {5: 24.9, 10: 30.8, 20: 43.9, 70: 131.5, 100: 182.6, 200: 416.4}
+    source_modele: LICS2022 Annexe 11.1 Fig. 47 (lecture graphique, changement de système)
+    statut_modele: source
+    comparaison: manuelle   # courbe ou table : pas de comparaison automatique valeur par valeur
+    priorite: haute
+    contexte: [element, puissance_kw, base_surface, cas, perimetre_cout, annee_prix, devise, tva, pays, type_batiment, nature]
+    mots_cles:
+      fr: [coût d'une pompe à chaleur, raccordement au chauffage à distance, coût par kW, changement de système]
+      de: [Investitionskosten Wärmepumpe, Fernwärmeanschluss, Kosten pro kW, Systemwechsel]
+      en: [heat pump installation cost, district heating connection cost, cost per kW]
+    remarque: Relever la puissance associée à chaque coût ; une valeur en CHF/kW sans puissance perd son sens.
+
+  - id: puissance_specifique
+    famille: production_chaleur
+    definition: >
+      Puissance de chauffage installée par m² de SRE, en fonction de la consommation (le modèle utilise
+      13 + 0.2267 × énergie finale en kWh/m²·a).
+    unite: W/m2_SRE
+    valeur_modele: {ordonnee: 13, pente_W_par_kWh_m2a: 0.2267}
+    source_modele: LICS2022 Tab. 9 (courbe médiane)
+    statut_modele: source
+    comparaison: manuelle   # courbe ou table : pas de comparaison automatique valeur par valeur
+    priorite: moyenne
+    contexte: [type_batiment, base_surface, nature]
+    mots_cles:
+      fr: [puissance spécifique, puissance de chauffage, heures de pleine charge]
+      de: [spezifische Heizleistung, Vollbetriebsstunden]
+      en: [specific heating power, full-load hours]
+    remarque: Les heures de pleine charge (consommation / puissance) sont une forme équivalente ; les relever aussi.
+
+  # ---------------------------------------------------------------------------------------------------------------
+  # Photovoltaïque
+  # ---------------------------------------------------------------------------------------------------------------
+  - id: cout_investissement_pv
+    famille: photovoltaique
+    definition: Coût d'investissement d'une installation photovoltaïque en toiture, par kWc.
+    unite: CHF/kWc
+    valeur_modele: 2400
+    source_modele: SWISSOLAR2024 (10-30 kWc, prix 2023)
+    statut_modele: source
+    priorite: moyenne
+    contexte: [puissance_kw, perimetre_cout, annee_prix, devise, tva, pays, nature]
+    mots_cles:
+      fr: [coût photovoltaïque, prix par kWc, installation solaire]
+      de: [PV-Kosten, Kosten pro kWp, Photovoltaikanlage]
+      en: [PV system cost, cost per kWp, rooftop solar]
+
+  - id: productible_pv
+    famille: photovoltaique
+    definition: Production annuelle d'électricité par kWc installé.
+    unite: kWh/(kWc·a)
+    valeur_modele: 1050
+    source_modele: SWISSOLAR2024
+    statut_modele: source
+    priorite: moyenne
+    contexte: [pays, nature]
+    mots_cles:
+      fr: [productible, rendement spécifique, production annuelle]
+      de: [spezifischer Ertrag, Jahresertrag]
+      en: [specific yield, annual yield]
+
+  - id: densite_pv
+    famille: photovoltaique
+    definition: Puissance installable par m² de toiture (inverse de la surface par kWc).
+    unite: kWc/m2_toiture
+    valeur_modele: 0.2
+    source_modele: hypothèse modèle (~5 m² par kWc)
+    statut_modele: hypothese_modele
+    priorite: basse
+    contexte: [nature]
+    mots_cles:
+      fr: [surface par kWc, densité de puissance]
+      de: [Fläche pro kWp, Leistungsdichte]
+      en: [area per kWp, power density]
+
+  - id: part_toiture_utilisable_pv
+    famille: photovoltaique
+    definition: Part de la surface de toiture utilisable pour le photovoltaïque.
+    unite: "-"
+    valeur_modele: 0.48
+    source_modele: hypothèse modèle (médiane du parc genevois, cadastre solaire)
+    statut_modele: hypothese_modele
+    priorite: moyenne
+    contexte: [type_batiment, pays, nature]
+    mots_cles:
+      fr: [toiture utilisable, potentiel solaire, surface exploitable]
+      de: [nutzbare Dachfläche, Solarpotenzial]
+      en: [usable roof area, solar potential, roof utilisation factor]
+
+  - id: cout_entretien_pv
+    famille: photovoltaique
+    definition: Coût d'exploitation et d'entretien du photovoltaïque par kWh produit.
+    unite: CHF/kWh
+    valeur_modele: 0.03
+    source_modele: SWISSOLAR2024
+    statut_modele: source
+    priorite: basse
+    contexte: [annee_prix, devise, pays, nature]
+    mots_cles:
+      fr: [coût d'exploitation, entretien, maintenance]
+      de: [Betriebskosten, Unterhalt]
+      en: [O&M cost, operation and maintenance]
+
+  # ---------------------------------------------------------------------------------------------------------------
+  # Durées de vie
+  # ---------------------------------------------------------------------------------------------------------------
+  - id: duree_de_vie
+    famille: transversal
+    definition: Durée de vie (technique ou d'amortissement, à préciser dans `nature`) d'une mesure.
+    unite: a
+    valeur_modele: {facade: 50, toit: 40, cave_sol: 50, fenetres: 30, pac_air_eau: 15, cad: 20, pv: 25}
+    source_modele: STREICHER2020 (enveloppe) ; HFM2015 Tab. 10 (PAC, CAD) ; SWISSOLAR2024 (PV)
+    statut_modele: source
+    priorite: moyenne
+    contexte: [element, nature]
+    mots_cles:
+      fr: [durée de vie, durée d'utilisation, durée d'amortissement]
+      de: [Lebensdauer, Nutzungsdauer, Amortisationsdauer]
+      en: [lifetime, service life, useful life]
+    remarque: Distinguer durée technique et durée économique / d'amortissement si le document fait la différence.
+
+  # ---------------------------------------------------------------------------------------------------------------
+  # Carbone gris
+  # ---------------------------------------------------------------------------------------------------------------
+  - id: carbone_gris
+    famille: carbone_gris
+    definition: >
+      Émissions grises (fabrication + élimination) d'un matériau ou d'un équipement de rénovation, dans l'unité de
+      référence donnée par la source (par kg, par m², par kW, par kWc).
+    unite: kgCO2e/unite_reference
+    valeur_modele:
+      EPS_par_kg: 7.6
+      fenetre_par_m2_ouverture: 120.5
+      pac_air_eau_par_kW: 571
+      cad_par_kW: 85.8
+      pv_toiture_plate_par_kWc: 1140
+    source_modele: KBOB2022 (10.004, 05.031, 05.003, 31.019, 31.003, 34.026) ; mises à l'échelle hypothèse modèle
+    statut_modele: source
+    priorite: moyenne
+    contexte: [element, materiau, base_surface, perimetre_lca, pays, nature]
+    mots_cles:
+      fr: [énergie grise, émissions grises, carbone gris, analyse de cycle de vie]
+      de: [graue Energie, graue Emissionen, Ökobilanz, Treibhausgasemissionen Erstellung]
+      en: [embodied carbon, embodied emissions, life cycle assessment, GWP]
+    remarque: Préciser les phases ACV couvertes (A1-A3, A4-A5, B, C…) dans perimetre_lca.
+
+  - id: masse_volumique_isolant
+    famille: carbone_gris
+    definition: Masse volumique de l'isolant (sert à passer de l'épaisseur au carbone gris).
+    unite: kg/m3
+    valeur_modele: {EPS: 20}
+    source_modele: hypothèse modèle (plage KBOB 15-40)
+    statut_modele: hypothese_modele
+    priorite: basse
+    contexte: [materiau, nature]
+    mots_cles:
+      fr: [masse volumique, densité]
+      de: [Rohdichte]
+      en: [density]
+
+  # ---------------------------------------------------------------------------------------------------------------
+  # Énergie : émissions et prix
+  # ---------------------------------------------------------------------------------------------------------------
+  - id: facteur_emission
+    famille: transversal
+    definition: Facteur d'émission de gaz à effet de serre par kWh d'énergie finale livrée, par agent énergétique.
+    unite: kgCO2e/kWh_energie_finale
+    valeur_modele: {Gaz: 0.198, Mazout: 0.265, CAD: 0.131, Électrique: 0.097, Bois / biogaz: 0.0277}
+    source_modele: combustion directe ; électricité et CAD fixés projet (0.097 = NAEGELI2020 Tab. 3) ; bois KBOB2022
+    statut_modele: fixe_projet
+    priorite: moyenne
+    contexte: [agent_energetique, perimetre_lca, annee_donnee, pays, nature]
+    mots_cles:
+      fr: [facteur d'émission, contenu CO2, émissions par kWh]
+      de: [Emissionsfaktor, Treibhausgasemissionen pro kWh]
+      en: [emission factor, carbon intensity, CO2 per kWh]
+    remarque: Préciser scope / périmètre (combustion seule, amont compris, mix de production ou de consommation).
+
+  - id: prix_energie
+    famille: transversal
+    definition: Prix de l'énergie finale payé par le consommateur, taxe CO₂ comprise, par agent énergétique.
+    unite: CHF/kWh
+    valeur_modele: {Gaz: 0.109, Mazout: 0.112, Électrique: 0.206, CAD: 0.088, Bois / biogaz: 0.09}
+    source_modele: ElCom, SIG, OFS (moyenne 2022-2026, estimations) ; CAD et bois LICS2022 Tab. 11
+    statut_modele: source
+    priorite: moyenne
+    contexte: [agent_energetique, annee_prix, devise, tva, pays, type_batiment, nature]
+    mots_cles:
+      fr: [prix de l'énergie, tarif, prix du gaz, prix de l'électricité]
+      de: [Energiepreis, Gaspreis, Strompreis, Heizölpreis]
+      en: [energy price, tariff, gas price, electricity price]
+
+  - id: facteur_prix_electricite_gros_consommateur
+    famille: transversal
+    definition: Rapport entre le prix de l'électricité d'un client commercial / gros consommateur et celui d'un ménage type.
+    unite: "-"
+    valeur_modele: 0.75
+    source_modele: hypothèse modèle (profils ElCom C2-C3 ≈ 0.7-0.8 × H4)
+    statut_modele: hypothese_modele
+    priorite: basse
+    contexte: [annee_prix, pays, nature]
+    mots_cles:
+      fr: [prix commercial, gros consommateur]
+      de: [Gewerbekunden, Grossverbraucher, Verbrauchsprofil]
+      en: [commercial electricity price, large consumer]
+
+  # ---------------------------------------------------------------------------------------------------------------
+  # Économie
+  # ---------------------------------------------------------------------------------------------------------------
+  - id: taux_actualisation
+    famille: economie
+    definition: Taux d'actualisation réel utilisé pour annualiser les investissements de rénovation.
+    unite: "-"
+    valeur_modele: 0.03
+    source_modele: LICS2022 ; HFM2015
+    statut_modele: source
+    priorite: moyenne
+    contexte: [nature, pays]
+    mots_cles:
+      fr: [taux d'actualisation, taux d'intérêt, annuité]
+      de: [Diskontsatz, Kalkulationszinssatz, Annuität]
+      en: [discount rate, interest rate, annuity]
+
+  - id: cout_social_carbone
+    famille: economie
+    definition: Coût social du carbone / coût externe des émissions de CO₂ utilisé dans une évaluation économique.
+    unite: CHF/tCO2e
+    valeur_modele: 200
+    source_modele: fixé projet
+    statut_modele: fixe_projet
+    priorite: basse
+    contexte: [annee_prix, devise, pays, nature]
+    mots_cles:
+      fr: [coût social du carbone, coût externe, prix du carbone]
+      de: [Klimakosten, externe Kosten, CO2-Preis]
+      en: [social cost of carbon, carbon price, external cost]
+
+  - id: part_cout_preservant_valeur
+    famille: economie
+    definition: >
+      Part du coût d'une rénovation qui préserve la valeur (remplacement à l'identique, entretien différé), par
+      opposition à la part qui crée une plus-value. Le modèle utilise la part préservant la valeur.
+    unite: "-"
+    valeur_modele: {enveloppe: 0.55, equipement: 0.71, pv: 0}
+    source_modele: OFEN_OFL2019 §4.5 (20 rénovations, par CFC)
+    statut_modele: source
+    priorite: moyenne
+    contexte: [element, cas, type_batiment, pays, taille_echantillon, nature]
+    mots_cles:
+      fr: [part créant des plus-values, part préservant la valeur, travaux à plus-value, OBLF art. 14]
+      de: [wertvermehrender Anteil, werterhaltender Anteil, Mehrwert]
+      en: [value-enhancing share, maintenance share]
+
+  - id: hausse_loyer_apres_renovation
+    famille: economie
+    definition: Hausse de loyer après rénovation énergétique, en part du loyer initial.
+    unite: "-"
+    valeur_modele: 0.10
+    source_modele: hypothèse modèle
+    statut_modele: hypothese_modele
+    priorite: haute
+    contexte: [cas, type_batiment, pays, nature]
+    mots_cles:
+      fr: [hausse de loyer, report sur les loyers, loyer après rénovation]
+      de: [Mietzinserhöhung, Überwälzung, Miete nach Sanierung]
+      en: [rent increase after retrofit, renoviction, pass-through]
+
+  - id: perte_loyer_pendant_travaux
+    famille: economie
+    definition: Perte de loyers due aux travaux, exprimée en années (ou mois) de loyer.
+    unite: a_de_loyer
+    valeur_modele: 1
+    source_modele: hypothèse modèle
+    statut_modele: hypothese_modele
+    priorite: haute
+    contexte: [cas, type_batiment, pays, nature]
+    mots_cles:
+      fr: [perte de loyer, vacance pendant les travaux, réduction de loyer pendant les travaux]
+      de: [Mietausfall, Leerstand während Sanierung, Mietzinsreduktion]
+      en: [rent loss during works, vacancy during renovation]
+
+  # ---------------------------------------------------------------------------------------------------------------
+  # Vieillissement (modèle d'état)
+  # ---------------------------------------------------------------------------------------------------------------
+  - id: courbe_vieillissement
+    famille: vieillissement
+    definition: >
+      Évolution de l'état (indice 1 = neuf, 0 = fin de vie) d'un bâtiment ou d'un élément en fonction de l'âge.
+      Le modèle : 1 pendant 10 ans, −0.01/an jusqu'à 0.40 à 70 ans, puis −0.005/an.
+    unite: "-"
+    valeur_modele: {annees_sans_degradation: 10, taux_annuel: 0.01, age_coude: 70, taux_annuel_apres_coude: 0.005}
+    source_modele: hypothèse modèle (indice Stratus non disponible)
+    statut_modele: hypothese_modele
+    comparaison: manuelle   # courbe ou table : pas de comparaison automatique valeur par valeur
+    priorite: haute
+    contexte: [element, type_batiment, nature]
+    mots_cles:
+      fr: [indice d'état, vétusté, vieillissement, courbe de dégradation]
+      de: [Zustandswert, Altersentwertung, Alterungskurve, Stratus]
+      en: [condition index, deterioration curve, building ageing, depreciation]
+
+  - id: seuil_renovation_complete
+    famille: vieillissement
+    definition: Indice d'état en dessous duquel une rénovation complète (et pas seulement énergétique) est justifiée.
+    unite: "-"
+    valeur_modele: 0.7
+    source_modele: hypothèse modèle
+    statut_modele: hypothese_modele
+    priorite: moyenne
+    contexte: [type_batiment, nature]
+    mots_cles:
+      fr: [seuil d'intervention, rénovation complète, état critique]
+      de: [Interventionsschwelle, Gesamtsanierung, Zustandsschwelle]
+      en: [intervention threshold, deep renovation trigger]
+
+  # ---------------------------------------------------------------------------------------------------------------
+  # Résultats de paquets / cas d'étude (sorties du modèle, à comparer à des rénovations documentées)
+  # ---------------------------------------------------------------------------------------------------------------
+  - id: reduction_consommation_paquet
+    famille: paquets_cas_etude
+    definition: >
+      Réduction relative de la consommation (énergie finale ou besoin de chauffage, à préciser dans `nature`) obtenue
+      par une mesure ou un paquet de mesures.
+    unite: "-"
+    valeur_modele: null
+    source_modele: calculé par le modèle
+    statut_modele: calcule
+    priorite: haute
+    contexte: [element, cas, type_batiment, periode_construction, pays, taille_echantillon, nature]
+    mots_cles:
+      fr: [économie d'énergie, réduction de consommation, gain énergétique]
+      de: [Energieeinsparung, Verbrauchsreduktion]
+      en: [energy savings, consumption reduction]
+    remarque: >
+      Noter la liste des mesures du paquet dans `element` (ex. « facade+toit+fenetres ») et la consommation avant /
+      après si elles sont données.
+
+  - id: consommation_avant_apres
+    famille: paquets_cas_etude
+    definition: Consommation ou IDC avant et après rénovation d'un bâtiment ou d'un échantillon.
+    unite: kWh/(m2_SRE·a)
+    valeur_modele: null
+    source_modele: calculé par le modèle
+    statut_modele: calcule
+    priorite: moyenne
+    contexte: [element, moment, cas, agent_energetique, type_batiment, periode_construction, base_surface, pays, taille_echantillon, nature]
+    mots_cles:
+      fr: [IDC, consommation spécifique, avant et après rénovation]
+      de: [Energiekennzahl, Verbrauch vor und nach Sanierung]
+      en: [energy use intensity, EUI, pre- and post-retrofit consumption]
+
+  - id: cout_renovation_par_sre
+    famille: paquets_cas_etude
+    definition: Coût total d'une rénovation (mesure ou paquet) rapporté au m² de SRE.
+    unite: CHF/m2_SRE
+    valeur_modele: null
+    source_modele: calculé par le modèle
+    statut_modele: calcule
+    priorite: haute
+    contexte: [element, cas, perimetre_cout, annee_prix, devise, tva, type_batiment, periode_construction, pays, taille_echantillon, nature]
+    mots_cles:
+      fr: [coût de rénovation par m², coût total, coût du paquet]
+      de: [Sanierungskosten pro m² EBF, Gesamtkosten]
+      en: [renovation cost per floor area, total retrofit cost]
+
+  - id: cout_kwh_economise
+    famille: paquets_cas_etude
+    definition: Coût de l'énergie économisée (investissement annualisé / économie annuelle).
+    unite: CHF/kWh
+    valeur_modele: null
+    source_modele: calculé par le modèle
+    statut_modele: calcule
+    priorite: moyenne
+    contexte: [element, cas, annee_prix, devise, pays, nature]
+    mots_cles:
+      fr: [coût du kWh économisé, coût d'économie]
+      de: [Kosten der eingesparten Energie, Einsparkosten]
+      en: [cost of conserved energy, CCE, levelized cost of saved energy]
+
+  - id: cout_tonne_co2_evitee
+    famille: paquets_cas_etude
+    definition: Coût d'abattement, soit le coût annualisé par tonne de CO₂ évitée.
+    unite: CHF/tCO2e
+    valeur_modele: null
+    source_modele: calculé par le modèle
+    statut_modele: calcule
+    priorite: moyenne
+    contexte: [element, cas, annee_prix, devise, pays, nature]
+    mots_cles:
+      fr: [coût d'abattement, coût par tonne évitée]
+      de: [Vermeidungskosten, CO2-Vermeidungskosten]
+      en: [abatement cost, marginal abatement cost, cost per tonne avoided]
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Lots : familles traitées ensemble dans un même prompt (prompts_manuels/<lot>__…).
+# Chaque famille doit apparaître dans exactement un lot. Un document court peut être traité en une fois (lot « tout »).
+# ---------------------------------------------------------------------------------------------------------------------
+lots:
+  A_enveloppe:
+    description: Enveloppe, géométrie, carbone gris
+    familles: [enveloppe, geometrie, carbone_gris]
+  B_systemes:
+    description: Production de chaleur, photovoltaïque, énergie, durées de vie
+    familles: [production_chaleur, photovoltaique, transversal, ecs, climat]
+  C_performance_economie:
+    description: Écart de performance, résultats de rénovations, économie, vieillissement
+    familles: [ecart_performance, paquets_cas_etude, economie, vieillissement]
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Champs de contexte. Chaque observation les porte tous ; ceux listés dans `contexte` d'un paramètre sont à chercher
+# activement. Valeur par défaut : non_precise (le document ne le dit pas) — jamais deviner.
+# Les listes fermées gardent les valeurs comparables ; `autre` + `remarque` pour le reste.
+# Test de complétude : si deux valeurs d'un même paramètre diffèrent de plus d'un facteur 2 et qu'aucun de ces champs
+# ne l'explique, il en manque un : l'ajouter ici et ré-extraire.
+# ---------------------------------------------------------------------------------------------------------------------
+contextes:
+  element:
+    description: Élément ou mesure concerné ; pour un paquet, éléments joints par « + » (ex. facade+toit+fenetres).
+    valeurs: libre
+    exemples: [facade, toit, cave_sol, fenetres, pac_air_eau, pac_sol, cad, chaudiere_gaz, pv, ventilation, paquet_complet]
+  materiau:
+    description: Matériau (isolant, cadre de fenêtre…).
+    valeurs: libre
+  base_surface:
+    description: Grandeur de référence à laquelle la valeur est rapportée.
+    valeurs: [m2_element, m2_SRE, m2_fenetre, m2_toiture, kW_th, kWc, installation, batiment, logement, kg_materiau, kWh_energie_finale, kWh_chaleur_utile, aucune, autre, non_precise]
+  cas:
+    description: Nature de l'intervention.
+    valeurs: [renovation_energetique, remise_en_etat_non_energetique, surcout_energetique, renovation_complete, remplacement_a_l_identique, neuf, autre, non_precise]
+  perimetre_cout:
+    description: Ce que couvre un coût.
+    valeurs: [materiau_seul, fourniture_et_pose, avec_frais_annexes, cout_total_projet, autre, non_precise]
+  perimetre_lca:
+    description: Phases ou périmètre couverts (ACV ou facteur d'émission), en texte court (ex. A1-A3+C, combustion seule).
+    valeurs: libre
+  annee_prix:
+    description: Année de référence des prix (pas l'année de publication).
+    valeurs: entier ou non_precise
+  annee_donnee:
+    description: Année à laquelle la valeur se rapporte, pour les grandeurs non monétaires (mix électrique, etc.).
+    valeurs: entier ou non_precise
+  devise:
+    valeurs: [CHF, EUR, USD, autre, non_precise]
+  tva:
+    valeurs: [incluse, exclue, non_precise]
+  pays:
+    description: Pays ou région de validité de la valeur (code ISO, ou CH-GE pour un canton).
+    valeurs: libre
+  type_batiment:
+    description: Aligné sur les affectations du modèle quand possible.
+    valeurs: [logement_individuel, logement_collectif, logement_mixte, administration, education, sante_social, commerce_ateliers, culture_loisirs, sport, parc_mixte, autre, non_precise]
+  periode_construction:
+    description: Période ou année de construction (ex. 1946-1960).
+    valeurs: libre
+  nombre_etages:
+    valeurs: entier ou non_precise
+  agent_energetique:
+    valeurs: [gaz, mazout, electricite, cad, bois, pac, solaire, autre, non_precise]
+  temperature_depart:
+    description: Température de départ du chauffage (°C) pour une PAC.
+    valeurs: nombre ou non_precise
+  puissance_kw:
+    description: Puissance de l'installation à laquelle la valeur se rapporte (kW thermique ou kWc).
+    valeurs: nombre ou non_precise
+  moment:
+    valeurs: [avant, apres, non_precise]
+  taille_echantillon:
+    description: Nombre de bâtiments ou d'installations derrière la valeur.
+    valeurs: entier ou non_precise
+  nature:
+    description: Origine de la valeur.
+    valeurs: [mesure_terrain, simulation, norme_ou_reglement, hypothese_auteur, enquete_prix, repris_d_une_autre_source, non_precise]
